@@ -114,6 +114,12 @@
   .lk__log svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; margin-top: 2px; color: var(--u-muted); }
   .lk__log time { color: var(--u-muted); font-size: 12px; }
 
+  /* review fixes: no strike-through on a passed check, no bounce on switches, scrollable code */
+  .ui-check.is-done .ui-check__label { text-decoration: none; }
+  .ui-switch, .ui-switch > i { transition-timing-function: cubic-bezier(.22, 1, .36, 1) !important; }
+  .faq-code .ui-code__pre { overflow-x: auto !important; }
+  .d-main__head .d-h { font: 500 16px/1.2 var(--font-text); color: #e9f2f2; }
+  ::selection { background: rgb(255 122 61 / .32); color: #fff; }
   /* the skip link (system.md, Base): out of the flow until focused */
   .skip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .skip:focus { width: auto; height: auto; clip-path: none; padding: 8px 12px; background: var(--bg); z-index: 20; }
@@ -127,7 +133,6 @@
   .close__word { overflow: visible; }
   .faq-code { margin-top: var(--s-5); }
   .faq-code .ui-code { width: 100%; }
-  .faq-code .ui-code__pre { overflow: hidden; }
   @media (max-width: 1023px) { #burn .mo-host { display: none; } }
   @media (min-width: 640px) and (max-width: 1023px) { .faq-code .ui-code__hint { display: none; } #faq .faq__item { padding-block: var(--s-4); } }
   @media (min-width: 640px) and (max-width: 1023px) { #burn .frame--split { min-height: 320px; } }
@@ -143,7 +148,7 @@
      footer footer-dark, rhythm surface-pairs (#burn on .ground-surface), buttons tonal, mark wordmark,
      palette brand (Elysium's own night teal #05161a from its chain mark, one ember accent #ff7a3d for the pyre),
      type mona (Mona Sans + Geist Mono), radius sharp (fintech)
-     effect: grain-gradient in the hero art frame; card ground painterly-landscape on the #guarantees panels
+     effect: grain-gradient in the hero art frame; card ground painterly-landscape dealt, replaced after review by grain-gradient held still in the page palette
      moments: marquee-row as the last row of #burn; no hero moment
      screens: hero 1, #locks 1, #guarantees 2, #burn 1, #faq 1, footer 1 -->
 <header class="nav nav--centre">
@@ -152,29 +157,13 @@
     <a class="nav__logo" href="#top">Elysian Pyre</a>
     <nav class="nav__links" aria-label="Main">
       <div class="nav__item">
-        <a class="nav__link" href="#locks">Locks <svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-        <div class="nav__menu">
-          <div class="wrap grid">
-            <div class="menu-col span-3">
-              <p class="t-label">Lock types</p>
-              <a href="#locks">Timed lock<span>Opens on the date you set</span></a>
-              <a href="#guarantees">Permanent lock<span>Never opens, for liquidity</span></a>
-              <a href="#burn">Burn<span>Takes tokens out of supply</span></a>
-            </div>
-            <div class="menu-col span-3">
-              <p class="t-label">Contract</p>
-              <a href="https://github.com/Paquito-gif/Lock">Source code<span>Solidity, MIT licence</span></a>
-              <a href="#guarantees">What the admin can do<span>Set the fee, nothing else</span></a>
-            </div>
-          </div>
-        </div>
-      </div>
+        <a class="nav__link" href="#locks">Locks</a></div>
       <div class="nav__item"><a class="nav__link" href="#guarantees">Contract</a></div>
       <div class="nav__item"><a class="nav__link" href="#burn">Burn</a></div>
       <div class="nav__item"><a class="nav__link" href="#faq">Questions</a></div>
     </nav>
     <div class="nav__actions">
-      <a class="btn btn--primary" href="app.html">Lock tokens</a>
+      <a class="btn btn--primary" href="app.html">Try the app</a>
     </div>
     <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -188,27 +177,27 @@
       <div class="hero__text span-6">
         <h1 id="hero-h">Token locks and burns on Elysium</h1>
         <p class="hero__lead">Lock ERC-20 tokens until a date or forever, or burn them out of the supply. One open-source contract that gives nobody else access to your tokens, for 0.1&nbsp;HYPE per action.</p>
-        <div class="btn-row"><a class="btn btn--primary" href="app.html">Lock tokens<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="https://github.com/Paquito-gif/Lock">Read the contract</a></div>
-        <p class="hero__proof">Chain 99901, gas paid in HYPE, MIT licence.</p>
+        <div class="btn-row"><a class="btn btn--primary" href="app.html">Try the app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="https://github.com/Paquito-gif/Lock">Read the contract</a></div>
+        <p class="hero__proof">Not deployed yet: the app runs as a preview until the contract goes live on chain 99901.</p>
       </div>
       <div class="hero__art span-6 start-7" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="31" data-fx-params='{"speed":0.35,"tint":0.6,"calmX":0.3,"calmY":0.85}' role="img" aria-label="The Elysian Pyre app: a list of token locks with their status, and a burn that lowered a token's supply">
         <div class="ly-piece ly-piece--main d-win d-win--dark" aria-hidden="true">
-          <div class="d-win__bar"><span class="d-win__dots"><i></i><i></i><i></i></span><span>Elysian Pyre · My locks</span></div>
+          <div class="d-win__bar"><span>Elysian Pyre · My locks</span></div>
           <div class="d-win__body">
             <div class="d-side">
-              <span class="is-on"><i></i>Locks</span><span><i></i>Permanent</span><span><i></i>Burns</span>
+              <span class="is-on"><i></i>Lock</span><span><i></i>Lock forever</span><span><i></i>Burn</span>
               <span class="d-side__label">Tokens</span><span><i></i>USDC</span><span><i></i>WHYPE</span><span><i></i>LP tokens</span>
             </div>
             <div class="d-main">
-              <div class="d-main__head"><h4>My locks</h4><span class="d-btn" style="background:#ff7a3d;color:#05161a">New lock</span></div>
-              <div class="d-tabs"><span class="is-on">All 7</span><span>Locked 4</span><span>Forever 2</span></div>
+              <div class="d-main__head"><b class="d-h">My locks</b></div>
+              <div class="d-tabs"><span class="is-on">All 6</span><span>Locked 3</span><span>Forever 2</span></div>
               <div class="d-rows">
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #12 · liquidity</small></div><span class="num">250,000</span><span class="d-chip d-chip--forever">Forever</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #9 · team salaries</small></div><span class="num">18,400</span><span class="d-chip d-chip--lock">42 days left</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #8 · treasury</small></div><span class="num">1,250</span><span class="d-chip d-chip--open">Unlocked</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #6 · grant, part 2</small></div><span class="num">6,000</span><span class="d-chip d-chip--lock">118 days left</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #5 · liquidity</small></div><span class="num">80,000</span><span class="d-chip d-chip--forever">Forever</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #3 · advisors</small></div><span class="num">640</span><span class="d-chip d-chip--lock">1 year left</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #12 · permanent</small></div><span class="num">250,000</span><span class="d-chip d-chip--forever">Forever</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #9 · opens 21 Dec 2026</small></div><span class="num">18,400</span><span class="d-chip d-chip--lock">42 days left</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #8 · opened 2 Nov 2026</small></div><span class="num">1,250</span><span class="d-chip d-chip--open">Unlocked</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #6 · opens 7 Mar 2027</small></div><span class="num">6,000</span><span class="d-chip d-chip--lock">118 days left</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #5 · permanent</small></div><span class="num">80,000</span><span class="d-chip d-chip--forever">Forever</span></div>
+                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #3 · opens 9 Nov 2027</small></div><span class="num">640</span><span class="d-chip d-chip--lock">1 year left</span></div>
               </div>
             </div>
           </div>
@@ -233,17 +222,17 @@
         <div class="app__pane app__pane--list">
           <div class="ui ui-panel ui-win" data-ui="window" data-open="Unlocked" data-work="Withdrawing" data-done="Withdrawn">
             <div class="ui-win__bar">
-              <span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+              
               <span class="ui-win__crumb">Elysian Pyre <i>/</i> <b>My locks</b></span>
               <span class="ui-spacer"></span>
-              <span class="ui-win__search" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><span class="ui-win__ph">Search</span><span class="ui-kbd">/</span></span>
+              
             </div>
             <div class="ui-win__body">
               <nav class="ui-win__side" aria-hidden="true">
-                <span class="ui-win__nav is-on"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Locked<em>6</em></span>
-                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5-.4"/></svg>Unlocked<em>2</em></span>
+                <span class="ui-win__nav is-on"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Locked<em>5</em></span>
+                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5-.4"/></svg>Unlocked<em>1</em></span>
                 <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="M5 8c0-1.7 1.3-3 3-3s3 1.3 3 3-1.3 3-3 3-3-1.3-3-3Z"/><path d="M2.5 8h1M12.5 8h1"/></svg>Forever<em>2</em></span>
-                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="M8 2.5c1.8 2 3.5 3.6 3.5 6.2A3.5 3.5 0 0 1 4.5 8.7c0-1.3.6-2.3 1.4-3.2.2 1 .8 1.6 1.4 1.8C7.5 5.6 7.6 4 8 2.5Z"/></svg>Burns<em>3</em></span>
+                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg>Withdrawn<em>2</em></span>
                 <span class="ui-win__label">Tokens</span>
                 <span class="ui-win__nav"><span class="ui-win__hash">#</span>USDC</span>
                 <span class="ui-win__nav"><span class="ui-win__hash">#</span>WHYPE</span>
@@ -251,16 +240,16 @@
               <div class="ui-win__main">
                 <div class="ui-win__cols" aria-hidden="true"><span>Token</span><span>Lock</span><span>Status</span><span>Opens</span></div>
                 <ul class="ui-win__rows">
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">18,400 USDC</span><span class="ui-win__sub">#9 · team salaries</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">21 Dec</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">1,250 WHYPE</span><span class="ui-win__sub">#8 · treasury</span><span class="ui-win__st is-you" data-st>Unlocked</span><span class="ui-win__age">2 Nov</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">250,000 LP</span><span class="ui-win__sub">#12 · WHYPE / USDC pool</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">6,000 USDC</span><span class="ui-win__sub">#6 · grant, part 2</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">7 Mar</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">640 WHYPE</span><span class="ui-win__sub">#3 · advisors</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">9 Nov 27</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">80,000 LP</span><span class="ui-win__sub">#5 · WHYPE / USDC pool</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">2,500 USDC</span><span class="ui-win__sub">#4 · bug bounty fund</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">1 Oct</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="5">W</span><span class="ui-win__who">300 WHYPE</span><span class="ui-win__sub">#2 · market maker</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">30 Jan</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="2">$</span><span class="ui-win__who">12,000 USDC</span><span class="ui-win__sub">#1 · audit budget</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">15 Feb</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">90 WHYPE</span><span class="ui-win__sub">#0 · test lock</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">20 Sep</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">18,400 USDC</span><span class="ui-win__sub">Lock #9</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">21 Dec</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">1,250 WHYPE</span><span class="ui-win__sub">Lock #8</span><span class="ui-win__st is-you" data-st>Unlocked</span><span class="ui-win__age">2 Nov</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">250,000 LP</span><span class="ui-win__sub">Lock #12</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">6,000 USDC</span><span class="ui-win__sub">Lock #6</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">7 Mar</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">640 WHYPE</span><span class="ui-win__sub">Lock #3</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">9 Nov 27</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">80,000 LP</span><span class="ui-win__sub">Lock #5</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">2,500 USDC</span><span class="ui-win__sub">Lock #4</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">1 Oct</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="5">W</span><span class="ui-win__who">300 WHYPE</span><span class="ui-win__sub">Lock #2</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">30 Jan</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="2">$</span><span class="ui-win__who">12,000 USDC</span><span class="ui-win__sub">Lock #1</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">15 Feb</span></li>
+                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">90 WHYPE</span><span class="ui-win__sub">Lock #0</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">20 Sep</span></li>
                 </ul>
               </div>
             </div>
@@ -304,7 +293,7 @@
           <article class="card card--row span-6 m-nolift">
             <h3>Checks the owner and the date</h3>
             <p>A withdrawal goes through only for the lock&rsquo;s owner, after its unlock date, and only once.</p>
-            <div class="panel panel--flush" data-fx="painterly-landscape" data-fx-palette='{"bg":"#c9dcdd","surface":"#eef4f3","ink":"#05161a","muted":"#4c6266","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="11" data-fx-params='{"drift":0}'>
+            <div class="panel panel--flush" role="img" aria-label="A withdrawal of lock 9 checked step by step: the lock exists, the owner signed, the date passed, the tokens sent" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="11" data-fx-params='{"speed":0,"tint":0.55,"grainMotion":0}'>
               <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max:340px;--ax:max(24px, 50% - 170px);--ay:40px;--ay-sm:40px" data-ui-loop>
                 <div class="ui ui-panel ui-checks" data-ui="checklist">
                   <div class="ui-checks__head"><div class="ui-title">Withdraw lock #9</div><span class="ui-spacer"></span><div class="ui-meta" data-checks-count>1 of 4</div></div>
@@ -322,7 +311,7 @@
           <article class="card card--row span-6 m-nolift">
             <h3>Gives the admin no key to your tokens</h3>
             <p>The admin can change the fee, capped at 1&nbsp;HYPE in the code, and nothing else. There is no pause.</p>
-            <div class="panel panel--flush" data-fx="painterly-landscape" data-fx-palette='{"bg":"#c9dcdd","surface":"#eef4f3","ink":"#05161a","muted":"#4c6266","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="23" data-fx-params='{"drift":0}'>
+            <div class="panel panel--flush" role="img" aria-label="What the admin may do: move locked tokens, off; pause withdrawals, off; shorten a lock, off; set the fee, on; choose the fee wallet, on" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="23" data-fx-params='{"speed":0,"tint":0.45,"grainMotion":0}'>
               <div class="stage stage--fade-b"><div class="at-right to-edge" style="--ax:32px;--ay:40px">
                 <div class="ui ui-panel ui-toggles" data-ui="toggles">
                   <div class="ui-head">
@@ -346,13 +335,13 @@
         <article class="card card--row span-6 m-nolift">
           <h3>Seals liquidity for good</h3>
           <p>A permanent lock never opens. Owners can also push a timed lock later, or hand it to another wallet.</p>
-          <div class="panel panel--flush" data-fx="painterly-landscape" data-fx-palette='{"bg":"#c9dcdd","surface":"#eef4f3","ink":"#05161a","muted":"#4c6266","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="37" data-fx-params='{"drift":0}'>
+          <div class="panel panel--flush" role="img" aria-label="Notifications: lock 12 made permanent, lock 9 extended, lock 2 received" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="37" data-fx-params='{"speed":0,"tint":0.6,"grainMotion":0}'>
             <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max:380px;--ax:32px;--ay:calc(100% - 180px);--ay-sm:calc(100% - 180px)">
               <div class="ui ui-notify" data-ui="notify">
                 <ul class="ui-notify__list" data-notify-list>
                   <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="4">LP</span><span class="ui-note__text"><span class="ui-note__title">Lock #12 is permanent<time>now</time></span><span class="ui-note__body">250,000 LP tokens, never withdrawable</span></span></li>
                   <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="1">$</span><span class="ui-note__text"><span class="ui-note__title">Lock #9 extended<time>2d</time></span><span class="ui-note__body">Now opens on 21 Dec 2026</span></span></li>
-                  <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="3">W</span><span class="ui-note__text"><span class="ui-note__title">Lock #3 moved<time>5d</time></span><span class="ui-note__body">New owner 0x9b21…e4c0</span></span></li>
+                  <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="3">W</span><span class="ui-note__text"><span class="ui-note__title">Lock #2 received<time>5d</time></span><span class="ui-note__body">Sent to you by 0x9b21…e4c0</span></span></li>
                 </ul>
               </div>
             </div></div>
@@ -360,11 +349,11 @@
         </article>
         <article class="card card--row span-6 m-nolift">
           <h3>Ships with 49 tests</h3>
-          <p>Unit, fuzz and invariant tests cover every path, and a script compares the deployed bytecode to the source.</p>
-          <div class="panel panel--flush" data-fx="painterly-landscape" data-fx-palette='{"bg":"#c9dcdd","surface":"#eef4f3","ink":"#05161a","muted":"#4c6266","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="41" data-fx-params='{"drift":0}'>
+          <p>Unit, fuzz and invariant tests cover every function. Once deployed, a script compares the chain&rsquo;s bytecode to this source.</p>
+          <div class="panel panel--flush" role="img" aria-label="A terminal running npm test: 49 tests passing" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="41" data-fx-params='{"speed":0,"tint":0.5,"grainMotion":0}'>
             <div class="stage stage--fade-b"><div class="at-rise to-edge" style="--w:420px;--ax:max(24px, 50% - 210px);--ay:40px">
               <div class="ui ui-panel ui-term" data-ui="terminal-run">
-                <div class="ui-term__head"><span class="ui-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ui-term__title">elysian-pyre</span><span class="ui-meta">zsh</span><span class="ui-spacer"></span><span class="ui-chip ui-chip--plain ui-term__branch">main</span></div>
+                <div class="ui-term__head"><span class="ui-term__title">elysian-pyre</span><span class="ui-meta">zsh</span><span class="ui-spacer"></span><span class="ui-chip ui-chip--plain ui-term__branch">main</span></div>
                 <div class="ui-term__screen" data-term-screen>
                   <div class="ui-term__track" data-term-track>
                     <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/elysian-pyre</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>npm test</span></div>
@@ -373,8 +362,7 @@
                     <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">ElysianPyre.invariant.t.sol</span><span class="ui-term__n">3 invariants</span><span class="ui-term__t">runs 1000</span></div>
                     <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
                     <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Tests</span><span class="ui-term__val">49 passing</span><span class="ui-term__dim">(49)</span></div>
-                    <div class="ui-term__ln ui-term__cmd" data-term-out><span class="ui-term__cwd">~/elysian-pyre</span><span class="ui-term__sig">$</span><span class="ui-term__typed">npm run check-bytecode</span></div>
-                    <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>MATCH</b><span class="ui-term__dim">deployed code is this repository</span></div>
+                    <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>Done</b><span class="ui-term__dim">no failures</span></div>
                   </div>
                 </div>
               </div>
@@ -433,7 +421,7 @@
           <div class="faq__item"><h3>What does a lock or a burn cost?</h3><p>0.1 HYPE per lock or burn, plus gas. The fee can never go above 1 HYPE: that cap is written into the contract.</p></div>
           <div class="faq__item"><h3>Can anyone else withdraw my tokens?</h3><p>No. Only the lock&rsquo;s owner can withdraw, and only after the unlock date. The admin has no function that moves tokens.</p></div>
           <div class="faq__item"><h3>What happens to a permanent lock?</h3><p>The tokens stay in the contract for good. Nobody, the owner included, can ever withdraw them.</p></div>
-          <div class="faq__item"><h3>Is the Elysian Pyre contract audited?</h3><p>Not yet. Its source is public with 49 tests, and anyone can check the deployed code against it.</p></div>
+          <div class="faq__item"><h3>Is the Elysian Pyre contract audited?</h3><p>Not yet, and it is not deployed yet either. The source is public with 49 tests; once it is live, anyone can check its bytecode against this source.</p></div>
         </div>
       </div>
     </div>
@@ -444,15 +432,14 @@
   <div class="wrap">
     <div class="closing__cta close--word">
       <div class="section-head--split">
-        <div><h2 id="close-h">Lock tokens on Elysium</h2><p class="t-lead">Connect a wallet, pick a token and a date, sign once. 0.1 HYPE per lock.</p></div>
-        <a class="btn btn--primary" href="app.html">Lock tokens<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
+        <div><h2 id="close-h">Lock tokens on Elysium</h2><p class="t-lead">Connect a wallet, pick a token and a date, sign once. 0.1 HYPE per lock, once the contract is live.</p></div>
+        <a class="btn btn--primary" href="app.html">Try the app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
       </div>
       <p class="close__word" aria-hidden="true">Elysian Pyre</p>
     </div>
     <div class="closing__links">
       <div class="grid">
         <div class="span-4 stack-4">
-          <a class="nav__logo" href="#top">Elysian Pyre</a>
           <p class="footer__lede">Token locks and burns on Elysium.</p>
         </div>
         <div class="span-2 footer__col"><h4>Locks</h4><ul><li><a href="#locks">My locks</a></li><li><a href="#guarantees">Lock types</a></li></ul></div>

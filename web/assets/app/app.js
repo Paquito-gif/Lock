@@ -33,7 +33,7 @@ const el = {
   amount: $('[data-amount]'), balance: $('[data-balance]'), max: $('[data-max]'),
   unlock: $('[data-unlock]'), otherOwner: $('[data-other-owner]'), owner: $('[data-owner]'),
   fee: $('[data-fee]'), sumDate: $('[data-sum-date]'), confirm: $('[data-confirm]'), confirmText: $('[data-confirm-text]'),
-  submit: $('[data-submit]'), msg: $('[data-msg]'), list: $('[data-list]'), refresh: $('[data-refresh]'),
+  submit: $('[data-submit]'), sumAmt: $('[data-sum-amt]'), ownerHint: $('[data-owner-hint]'), tz: $('[data-tz]'), msg: $('[data-msg]'), list: $('[data-list]'), refresh: $('[data-refresh]'),
   contractLine: $('[data-contract-line]'), tpl: $('#row-tpl'),
 };
 
@@ -54,10 +54,12 @@ const fmt = (v, d) => {
 const fmtDate = ts => new Date(Number(ts) * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const daysLeft = ts => Math.ceil((Number(ts) * 1000 - Date.now()) / 86400000);
 
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 function say(text, kind = '') {
   el.msg.className = 'msg' + (kind ? ` is-${kind}` : '');
   el.msg.innerHTML = text;
 }
+function sayErr(err) { say(esc(reason(err)), 'err'); }
 
 function reason(err) {
   if (err instanceof BaseError) {
@@ -111,7 +113,7 @@ async function connect() {
     state.account = getAddress(acc);
     await ensureChain();
     await syncChain();
-  } catch (e) { say(reason(e), 'err'); }
+  } catch (e) { sayErr(e); }
 }
 
 async function syncChain() {
@@ -129,6 +131,8 @@ function renderStatus() {
   else if (!state.chainOk) el.statusText.textContent = `${short(state.account)} · switch to Elysium`;
   else el.statusText.textContent = `${short(state.account)} · Elysium`;
   el.connect.textContent = state.account ? (state.chainOk ? short(state.account) : 'Switch to Elysium') : 'Connect wallet';
+  el.connect.classList.toggle('btn--primary', !(state.account && state.chainOk));
+  el.connect.classList.toggle('btn--secondary', !!(state.account && state.chainOk));
   renderSubmit();
 }
 
@@ -172,7 +176,7 @@ async function loadToken() {
     el.tokenInfo.innerHTML = `<b>${meta.symbol}</b>, ${meta.decimals} decimals · <a class="link" href="${CHAIN.explorer}/token/${address}" target="_blank" rel="noopener">${short(address)}</a>`;
   } catch {
     if (seq !== tokenSeq) return;
-    el.tokenInfo.textContent = 'No ERC-20 token found at this address on Elysium.';
+    el.tokenInfo.textContent = 'Could not read a token at this address. Check the address, or try again if Elysium is not reachable.';
   }
   renderSubmit();
 }
@@ -240,6 +244,18 @@ function renderSubmit() {
   const t = unlockTs();
   el.sumDate.textContent = t ? `${fmtDate(t)} (${daysLeft(t)} days)` : 'Pick a date';
   el.owner.hidden = !el.otherOwner.checked;
+  el.ownerHint.hidden = !el.otherOwner.checked;
+  const amt = parsedAmount();
+  el.sumAmt.textContent = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}${state.mode === 'burn' ? ', removed from supply' : ''}` : 'Enter an amount';
+  if (state.mode !== 'lock') {
+    const what = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}` : 'these tokens';
+    el.confirmText.textContent = state.mode === 'burn' ? `I understand ${what} will be destroyed for good.` : `I understand ${what} can never be withdrawn, by me or anyone.`;
+  }
+  $$('[data-plus]').forEach(b => {
+    const t0 = unlockTs();
+    const want = Math.floor(Date.now() / 1000) + Number(b.dataset.plus) * 86400;
+    b.setAttribute('aria-pressed', !!t0 && Math.abs(Number(t0) - want) < 120);
+  });
   el.tokenCustom.hidden = el.tokenSelect.value !== 'custom';
   if (state.busy) return;
   const p = problems();
@@ -256,7 +272,7 @@ function renderSubmit() {
 async function submit(e) {
   e.preventDefault();
   if (!state.account) return connect();
-  if (!state.chainOk) { try { await ensureChain(); await syncChain(); } catch (err) { say(reason(err), 'err'); } return; }
+  if (!state.chainOk) { try { await ensureChain(); await syncChain(); } catch (err) { sayErr(err); } return; }
   if (problems()) return;
 
   const w = wallet();
@@ -292,7 +308,7 @@ async function submit(e) {
     el.confirm.checked = false;
     await Promise.all([loadToken(), loadLocks()]);
   } catch (err) {
-    say(reason(err), 'err');
+    sayErr(err);
   } finally {
     state.busy = false;
     renderSubmit();
@@ -388,7 +404,7 @@ async function tx(node, functionName, args, done) {
     say(`${done}. ${txLink(hash)}`, 'ok');
     await Promise.all([loadToken(), loadLocks()]);
   } catch (err) {
-    say(reason(err), 'err');
+    sayErr(err);
     buttons.forEach(b => { b.disabled = false; });
   }
 }
@@ -428,7 +444,7 @@ function init() {
   el.form.addEventListener('submit', submit);
   el.connect.addEventListener('click', async () => {
     if (!state.account) return connect();
-    if (!state.chainOk) { try { await ensureChain(); await syncChain(); } catch (e) { say(reason(e), 'err'); } }
+    if (!state.chainOk) { try { await ensureChain(); await syncChain(); } catch (e) { sayErr(e); } }
   });
   el.refresh.addEventListener('click', () => { loadToken(); loadLocks(); });
 
@@ -437,6 +453,7 @@ function init() {
     window.ethereum.on?.('chainChanged', () => syncChain());
     window.ethereum.request({ method: 'eth_accounts' }).then(a => { if (a[0]) { state.account = getAddress(a[0]); syncChain(); } }).catch(() => {});
   }
+  el.tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
   setMode('lock');
   loadToken();
   loadLocks();

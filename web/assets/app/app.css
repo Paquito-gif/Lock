@@ -105,3 +105,8 @@
 .seg button { padding: 0 4px; white-space: nowrap; }
 /* disabled: a neutral, readable state instead of a faded accent */
 .btn.btn--primary[disabled] { opacity: 1; background: color-mix(in oklab, var(--ink) 9%, var(--surface)); color: var(--muted); border-color: var(--line); }
+
+/* review fixes */
+.form input::placeholder, .lockrow__edit input::placeholder { color: var(--muted); opacity: 1; }
+.chips button[aria-pressed="true"] { color: var(--ink); border-color: var(--accent); background: color-mix(in oklab, var(--accent) 12%, transparent); }
+::selection { background: rgb(255 122 61 / .32); color: #fff; }

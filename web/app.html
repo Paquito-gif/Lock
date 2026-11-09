@@ -92,10 +92,12 @@
 
           <div class="field" data-only="lock forever">
             <label class="check"><input type="checkbox" data-other-owner> Lock for another wallet</label>
-            <input id="owner" name="owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… owner address" data-owner hidden aria-label="Owner address">
+            <input id="owner" name="owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… owner address" data-owner hidden aria-label="Owner address" aria-describedby="owner-hint">
+            <p class="hint" id="owner-hint" data-owner-hint hidden>That wallet, not yours, will be the only one able to withdraw or extend this lock.</p>
           </div>
 
           <dl class="summary" data-summary>
+            <div><dt>Amount</dt><dd data-sum-amt>Enter an amount</dd></div>
             <div><dt>Fee</dt><dd data-fee>0.1 HYPE</dd></div>
             <div data-only="lock"><dt>Opens</dt><dd data-sum-date>Pick a date</dd></div>
             <div data-only="forever"><dt>Opens</dt><dd>Never</dd></div>
@@ -109,6 +111,7 @@
 
           <button class="btn btn--primary btn--block" type="submit" data-submit>Connect wallet</button>
           <p class="msg" data-msg role="status" aria-live="polite"></p>
+          <p class="hint">Dates are in your local time zone, <span data-tz></span>.</p>
         </form>
       </section>
 
