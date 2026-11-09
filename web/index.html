@@ -157,7 +157,7 @@ a { color: inherit; }
 .rituals .section-title { text-shadow: 0 4px 40px rgb(60 20 0 / .6); }
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 1100px; }
 .card { position: relative; overflow: hidden; border-radius: 20px; padding: 16px 16px 18px; display: grid; gap: 12px; text-decoration: none;
-  background: rgb(16 8 8 / .5); border: 1px solid rgb(255 255 255 / .15);
+  background: rgb(14 7 7 / .86); border: 1px solid rgb(255 255 255 / .15);
   backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 24px 60px rgb(20 6 2 / .45);
   transition: transform .5s var(--ease-out), border-color .4s, box-shadow .4s; }
@@ -477,11 +477,11 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
    ========================================================= */
 const CONFIG = {
   rituals: [
-    { name: 'Lock', tag: 'Timed', color: '#ff8a3d', mode: 'lock', opens: 'On your date', back: 'Yes, by you', draw: 'lock' },
-    { name: 'Seal', tag: 'Forever', color: '#ffd27a', mode: 'forever', opens: 'Never', back: 'No', draw: 'seal' },
-    { name: 'Burn', tag: 'Supply down', color: '#ff5a3a', mode: 'burn', opens: 'Never', back: 'Destroyed', draw: 'flame' },
+    { name: 'Lock', tag: 'Timed', color: '#ff8a3d', mode: 'lock', opens: 'On your date', back: 'Yes, by you', shot: 'lock' },
+    { name: 'Seal', tag: 'Forever', color: '#ffd27a', mode: 'forever', opens: 'Never', back: 'No', shot: 'seal' },
+    { name: 'Burn', tag: 'Supply down', color: '#ff5a3a', mode: 'burn', opens: 'Never', back: 'Destroyed', shot: 'burn' },
   ],
-  bootSteps: [[0, 'Igniting'], [0.3, 'Forging the padlock'], [0.65, 'Heating the pyre'], [0.95, 'Ready']],
+  bootSteps: [[0, 'Igniting'], [0.3, 'Cutting the stone'], [0.55, 'Forging the padlock'], [0.75, 'Heating the pyre'], [0.95, 'Ready']],
 };
 
 /* ---------- utilitaires ---------- */
@@ -493,7 +493,6 @@ const mobile = matchMedia('(max-width: 760px)').matches;
 const frame = () => new Promise((r) => requestAnimationFrame(r));
 function seeded(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-// Piste d'animation : [[p, valeur], ...] interpolée en douceur (nombres ou couleurs)
 class Track {
   constructor(keys) {
     this.k = keys.map(([p, v]) => [p, typeof v === 'string' ? new THREE.Color(v) : v]);
@@ -521,375 +520,535 @@ function setBoot(f) {
 }
 setBoot(0.04);
 await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]);
-setBoot(0.22);
+setBoot(0.12);
 await frame();
 
-/* ---------- textures procédurales ---------- */
-function glowTexture(size = 128) {
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const g = c.getContext('2d'); const r = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.25, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = r; g.fillRect(0, 0, size, size);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
-function smokeTexture(seed, size = 128) {
-  const rnd = seeded(seed * 977);
-  const N = 32, grid = Array.from({ length: N * N }, rnd);
-  const noise = (x, y) => {
+/* =========================================================
+   MATIÈRES : textures générées (couleur, relief, rugosité), toutes raccordables
+   ========================================================= */
+const TEX = mobile ? 256 : 512;
+// bruit de valeur raccordable : période entière en cellules
+function makeNoise(seed) {
+  const rnd = seeded(seed); const N = 256; const g = Float32Array.from({ length: N * N }, rnd);
+  const v = (x, y, P) => g[((x % P + P) % P) + ((y % P + P) % P) * N];
+  return (x, y, P) => {
     const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
-    const v = (a, b) => grid[((a % N) + N) % N + (((b % N) + N) % N) * N];
     const u = xf * xf * (3 - 2 * xf), w = yf * yf * (3 - 2 * yf);
-    return (v(xi, yi) * (1 - u) + v(xi + 1, yi) * u) * (1 - w) + (v(xi, yi + 1) * (1 - u) + v(xi + 1, yi + 1) * u) * w;
+    return (v(xi, yi, P) * (1 - u) + v(xi + 1, yi, P) * u) * (1 - w) + (v(xi, yi + 1, P) * (1 - u) + v(xi + 1, yi + 1, P) * u) * w;
   };
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const g = c.getContext('2d'); const img = g.createImageData(size, size);
+}
+const N1 = makeNoise(11), N2 = makeNoise(29), N3 = makeNoise(53);
+// fbm raccordable sur [0,1)² : base = nombre de cellules de l'octave 1
+function fbm(n, u, v, base, oct = 5, sx = 1, sy = 1) {
+  let s = 0, a = 0.5, f = base, norm = 0;
+  for (let o = 0; o < oct; o++) { s += a * n(u * f * sx, v * f * sy, Math.round(f * sx) || 1); norm += a; a *= 0.5; f *= 2; }
+  return s / norm;
+}
+// construit couleur + normale + rugosité à partir d'une fonction par pixel
+function material(fn, { size = TEX, repeat = 1, normalScale = 1.2 } = {}) {
+  const col = new Uint8ClampedArray(size * size * 4), rough = new Uint8ClampedArray(size * size * 4), height = new Float32Array(size * size);
+  const out = { r: 0, g: 0, b: 0, h: 0, ro: 0.8 };
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
-    let f = 0, a = 0.5, s = 4 / size;
-    for (let o = 0; o < 5; o++) { f += a * noise(x * s + seed * 7, y * s + seed * 3); a *= 0.5; s *= 2; }
-    const dx = x / size - 0.5, dy = y / size - 0.5;
-    const fall = clamp(1 - Math.sqrt(dx * dx + dy * dy) * 2.1);
-    const d = clamp((f - 0.38) * 2.2) * fall * fall;
-    const i = (y * size + x) * 4;
-    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = d * 255;
+    fn(x / size, y / size, out);
+    const i = y * size + x;
+    col[i * 4] = out.r * 255; col[i * 4 + 1] = out.g * 255; col[i * 4 + 2] = out.b * 255; col[i * 4 + 3] = 255;
+    rough[i * 4] = rough[i * 4 + 1] = rough[i * 4 + 2] = out.ro * 255; rough[i * 4 + 3] = 255;
+    height[i] = out.h;
   }
-  g.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-}
-// vignette d'un rituel : cadenas, sceau ou flamme, dessinés au canevas
-function ritualPortrait(kind, color, w = 440, h = 300) {
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const g = c.getContext('2d');
-  const bg = g.createLinearGradient(0, 0, 0, h);
-  bg.addColorStop(0, '#120708'); bg.addColorStop(1, '#2a0d07'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
-  const rnd = seeded(kind.length * 97);
-  for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(255,${150 + rnd() * 80 | 0},90,${rnd() * 0.7})`; g.fillRect(rnd() * w, rnd() * h, 1.5, 1.5); }
-  const cx = w / 2, cy = h * 0.56;
-  const halo = g.createRadialGradient(cx, cy, 0, cx, cy, h * 0.6);
-  halo.addColorStop(0, color + 'cc'); halo.addColorStop(0.35, color + '44'); halo.addColorStop(1, 'transparent');
-  g.fillStyle = halo; g.fillRect(0, 0, w, h);
-  g.shadowColor = color; g.shadowBlur = 28; g.lineCap = 'round';
-  const lock = (x, y, s, open) => {
-    g.strokeStyle = '#fff1dc'; g.lineWidth = s * 0.16;
-    g.beginPath(); g.arc(x, y - s * 0.55 - (open ? s * 0.35 : 0), s * 0.42, Math.PI, 0); g.lineTo(x + s * 0.42, y - s * 0.2); g.moveTo(x - s * 0.42, y - s * 0.55 - (open ? s * 0.35 : 0)); g.lineTo(x - s * 0.42, y - s * 0.2); g.stroke();
-    const body = g.createLinearGradient(0, y - s * 0.3, 0, y + s * 0.6);
-    body.addColorStop(0, '#fff3dd'); body.addColorStop(1, color);
-    g.fillStyle = body; g.beginPath(); g.roundRect(x - s * 0.62, y - s * 0.3, s * 1.24, s * 0.95, s * 0.14); g.fill();
-    g.shadowBlur = 0; g.fillStyle = '#2a0d07'; g.beginPath(); g.arc(x, y + s * 0.08, s * 0.1, 0, Math.PI * 2); g.fill(); g.fillRect(x - s * 0.04, y + s * 0.1, s * 0.08, s * 0.22); g.shadowBlur = 28;
+  const nrm = new Uint8ClampedArray(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const h = (xx, yy) => height[((yy + size) % size) * size + ((xx + size) % size)];
+    const dx = (h(x + 1, y) - h(x - 1, y)) * size * 0.02, dy = (h(x, y + 1) - h(x, y - 1)) * size * 0.02;
+    const l = Math.hypot(dx, dy, 1), i = (y * size + x) * 4;
+    nrm[i] = (-dx / l * 0.5 + 0.5) * 255; nrm[i + 1] = (dy / l * 0.5 + 0.5) * 255; nrm[i + 2] = (1 / l * 0.5 + 0.5) * 255; nrm[i + 3] = 255;
+  }
+  const tex = (data, srgb) => {
+    const t = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); t.anisotropy = 8;
+    t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; return t;
   };
-  if (kind === 'lock') {
-    lock(cx, cy, h * 0.42, false);
-    g.font = `500 ${h * 0.07}px JetBrains Mono, monospace`; g.fillStyle = '#ffe2c8'; g.textAlign = 'center'; g.shadowBlur = 10;
-    g.fillText('12 · 21 · 2026', cx, h * 0.93);
-  } else if (kind === 'seal') {
-    g.strokeStyle = color; g.lineWidth = 9;
-    for (let i = -3; i <= 3; i++) { g.beginPath(); g.ellipse(cx + i * 46, cy - h * 0.05, 22, 12, 0, 0, Math.PI * 2); g.stroke(); }
-    lock(cx, cy, h * 0.42, false);
-  } else {
-    const flame = (x, y, s, col) => {
-      const fg = g.createLinearGradient(0, y - s, 0, y);
-      fg.addColorStop(0, 'rgba(255,240,200,0)'); fg.addColorStop(0.4, col); fg.addColorStop(1, '#fff3cf');
-      g.fillStyle = fg; g.beginPath(); g.moveTo(x, y - s);
-      g.bezierCurveTo(x + s * 0.55, y - s * 0.45, x + s * 0.5, y, x, y);
-      g.bezierCurveTo(x - s * 0.5, y, x - s * 0.55, y - s * 0.45, x, y - s); g.fill();
-    };
-    flame(cx, h * 0.86, h * 0.72, color); flame(cx - 46, h * 0.88, h * 0.42, '#ff8a3d'); flame(cx + 52, h * 0.88, h * 0.48, '#ffd27a');
-    g.fillStyle = '#ffd27a'; g.shadowBlur = 16;
-    for (let i = 0; i < 4; i++) { g.beginPath(); g.ellipse(cx - 90 + i * 60, h * 0.2 + (i % 2) * 26, 14, 5, 0.4, 0, Math.PI * 2); g.fill(); }
-  }
-  return c.toDataURL('image/webp', 0.88);
+  return { map: tex(col, true), normalMap: tex(nrm), roughnessMap: tex(rough), normalScale: new THREE.Vector2(normalScale, normalScale) };
 }
+const hash2 = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
 
-const GLOW = glowTexture();
-const SMOKE = [1, 2, 3].map((s) => smokeTexture(s));
-setBoot(0.45);
-await frame();
+// pierre de taille en appareil réglé : 4 assises, blocs de longueur variable, joints creux
+const ROWS = 4;
+const rowBlocks = Array.from({ length: ROWS }, (_, r) => {
+  const rnd = seeded(100 + r); const cuts = [0]; let x = rnd() * 0.2;
+  while (x < 1) { cuts.push(x); x += 0.26 + rnd() * 0.22; }
+  return cuts.slice(1);
+});
+const STONE = material((u, v, o) => {
+  const row = Math.min(ROWS - 1, Math.floor(v * ROWS)), fy = v * ROWS - row;
+  const cuts = rowBlocks[row]; let k = 0; while (k < cuts.length && u >= cuts[k]) k++;
+  const left = k === 0 ? cuts[cuts.length - 1] - 1 : cuts[k - 1], right = k === cuts.length ? cuts[0] + 1 : cuts[k];
+  const ex = Math.min(u - left, right - u) * ROWS, ey = Math.min(fy, 1 - fy);
+  const edge = Math.min(ex, ey); const id = hash2(row, k);
+  const grain = fbm(N1, u, v, 8, 5), chips = fbm(N2, u, v, 32, 3);
+  const mortar = edge < 0.035;
+  const bevel = Math.min(1, edge / 0.09);
+  o.h = mortar ? 0 : 0.35 + 0.4 * bevel + grain * 0.35 - (chips > 0.68 ? 0.25 : 0);
+  const tone = 0.33 + id * 0.12 + (grain - 0.5) * 0.22;
+  const soot = 1 - 0.35 * Math.max(0, fbm(N3, u, v, 2, 3) - 0.45);
+  if (mortar) { o.r = 0.16; o.g = 0.15; o.b = 0.14; o.ro = 0.97; }
+  else { o.r = tone * 1.04 * soot; o.g = tone * 0.98 * soot; o.b = tone * 0.92 * soot; o.ro = 0.78 + grain * 0.18; }
+});
+setBoot(0.24); await frame();
+
+// dalles de pierre au sol, joints de terre, flaques qui reflètent le feu
+const FLAG = material((u, v, o) => {
+  const C = 5; const x = u * C, y = v * C; const xi = Math.floor(x), yi = Math.floor(y);
+  let f1 = 9, f2 = 9, id = 0;
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    const cx = xi + i, cy = yi + j; const wx = (cx + C) % C, wy = (cy + C) % C;
+    const px = cx + 0.2 + 0.6 * hash2(wx, wy), py = cy + 0.2 + 0.6 * hash2(wy + 7, wx + 3);
+    const d = Math.hypot(x - px, y - py);
+    if (d < f1) { f2 = f1; f1 = d; id = hash2(wx * 3, wy * 5); } else if (d < f2) f2 = d;
+  }
+  const edge = f2 - f1; const grain = fbm(N1, u, v, 10, 5); const wet = fbm(N3, u, v, 3, 4);
+  const joint = edge < 0.07;
+  o.h = joint ? 0 : 0.4 + Math.min(1, edge / 0.25) * 0.3 + grain * 0.3;
+  const tone = 0.22 + id * 0.1 + (grain - 0.5) * 0.12;
+  const puddle = joint ? 0 : sm(0.6, 0.66, wet);
+  if (joint) { o.r = 0.07; o.g = 0.06; o.b = 0.05; o.ro = 1; }
+  else { const d = 1 - puddle * 0.35; o.r = tone * d; o.g = tone * 0.97 * d; o.b = tone * 0.93 * d; o.ro = 0.88 - puddle * 0.55 + grain * 0.08; }
+}, { repeat: 26, normalScale: 1.6 });
+setBoot(0.34); await frame();
+
+// planches de chêne sombre, veinage étiré, interstices
+const WOOD = material((u, v, o) => {
+  const P = 6; const fx = u * P, k = Math.floor(fx), lx = fx - k;
+  const gap = lx < 0.03 || lx > 0.97;
+  const grain = fbm(N1, u + k * 0.37, v, 4, 6, 6, 0.5);
+  const ring = 0.5 + 0.5 * Math.sin((grain * 9 + lx * 3) * 6.283);
+  const tone = 0.13 + hash2(k, 3) * 0.05 + ring * 0.05;
+  o.h = gap ? 0 : 0.6 + ring * 0.15 + grain * 0.2 - Math.abs(lx - 0.5) * 0.15;
+  if (gap) { o.r = 0.02; o.g = 0.015; o.b = 0.01; o.ro = 1; }
+  else { o.r = tone * 1.25; o.g = tone * 0.9; o.b = tone * 0.65; o.ro = 0.72 + ring * 0.15; }
+}, { normalScale: 1.4 });
+setBoot(0.42); await frame();
+
+// fer forgé, rouille par plaques, piqûres
+const IRON = material((u, v, o) => {
+  const rust = fbm(N2, u, v, 4, 6), pit = fbm(N3, u, v, 32, 3), sc = fbm(N1, u, v, 2, 3, 1, 12);
+  const r = sm(0.52, 0.62, rust);
+  o.h = 0.5 + (pit - 0.5) * 0.5 + r * 0.15 + (sc - 0.5) * 0.1;
+  const base = 0.11 + (sc - 0.5) * 0.04;
+  o.r = base * (1 - r) + 0.32 * r; o.g = base * (1 - r) + 0.15 * r; o.b = base * 1.05 * (1 - r) + 0.07 * r;
+  o.ro = 0.42 + r * 0.5 + (pit - 0.5) * 0.15;
+}, { normalScale: 0.8 });
+// bûches calcinées : charbon fendu, braise dans les fentes (carte d'émission)
+const CHAR = material((u, v, o) => {
+  const c = fbm(N1, u, v, 3, 5, 1, 4); const crack = Math.abs(fbm(N2, u, v, 6, 4, 1, 3) - 0.5);
+  o.h = crack < 0.04 ? 0 : 0.5 + c * 0.5;
+  o.r = o.g = o.b = 0.04 + c * 0.05; o.ro = 0.9;
+});
+const CHAR_EMIT = (() => {
+  const s = TEX, d = new Uint8ClampedArray(s * s * 4);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const u = x / s, v = y / s; const crack = Math.abs(fbm(N2, u, v, 6, 4, 1, 3) - 0.5);
+    const e = sm(0.05, 0.0, crack) * (0.6 + 0.4 * fbm(N3, u, v, 8, 3)); const i = (y * s + x) * 4;
+    d[i] = 255 * e; d[i + 1] = 110 * e * e; d[i + 2] = 20 * e * e * e; d[i + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, s, s, THREE.RGBAFormat); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.needsUpdate = true; return t;
+})();
+// chaleur du métal : plus forte en bas du cadenas, irrégulière
+const HEAT_MAP = (() => {
+  const s = 256, d = new Uint8ClampedArray(s * s * 4);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const u = x / s, v = y / s; const n = fbm(N1, u, v, 4, 5);
+    const e = clamp(0.3 + Math.pow(1 - v, 1.3) * 0.7 + (n - 0.5) * 0.25); const i = (y * s + x) * 4;
+    d[i] = d[i + 1] = d[i + 2] = 255 * e; d[i + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, s, s, THREE.RGBAFormat); t.needsUpdate = true; return t;
+})();
+setBoot(0.5); await frame();
 
 /* =========================================================
    SCÈNE three.js
    ========================================================= */
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 1.75));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.4 : 1.6));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2('#140808', 0.012);
-const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 2000);
+scene.fog = new THREE.FogExp2('#0d0807', 0.012);
+const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 1500);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.55, 0.9);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.4, 0.55, 0.9);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
-const pointScale = () => innerHeight * renderer.getPixelRatio() * 0.5;
 
 const GATE_Z = -60, PYRE = new THREE.Vector3(0, 0, -36);
 
-/* ---------- pistes (tout ce qui change avec le scroll) ---------- */
+// environnement pour les reflets du métal : nuit, lueur chaude au ras du sol
+{
+  const envScene = new THREE.Scene();
+  const envSky = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide,
+    vertexShader: `varying vec3 d; void main(){ d = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+    fragmentShader: `varying vec3 d; void main(){ float h = d.y; vec3 c = mix(vec3(.05,.03,.025), vec3(.01,.012,.02), smoothstep(-.1,.6,h));
+      c += vec3(1.,.4,.12) * .9 * exp(-pow((h + .05) * 6., 2.)) * smoothstep(.2, 1., -d.z); gl_FragColor = vec4(c,1.); }` }));
+  envScene.add(envSky);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(envScene, 0.02).texture;
+  pm.dispose();
+}
+
+/* ---------- pistes ---------- */
 const T = {
-  skyTop: new Track([[0, '#030206'], [0.45, '#06030a'], [0.7, '#0b0406'], [0.86, '#05080c'], [0.95, '#0b3a3c'], [1, '#0e4a4a']]),
-  skyMid: new Track([[0, '#2a0b07'], [0.3, '#3a1008'], [0.6, '#4a1608'], [0.72, '#5a1c08'], [0.86, '#1c2a2e'], [0.95, '#3f9e94'], [1, '#4fb2a6']]),
-  skyBot: new Track([[0, '#0a0405'], [0.86, '#071012'], [0.95, '#0d2c2e'], [1, '#123a3a']]),
-  embers: new Track([[0, 0.7], [0.5, 1], [0.72, 1], [0.9, 0.5], [1, 0.15]]),
-  fog: new Track([[0, '#140806'], [0.3, '#1a0906'], [0.62, '#220b05'], [0.75, '#1a0906'], [0.86, '#0c1818'], [0.95, '#14403d'], [1, '#103734']]),
-  fogD: new Track([[0, 0.0065], [0.15, 0.009], [0.3, 0.01], [0.62, 0.011], [0.86, 0.009], [0.95, 0.011], [1, 0.009]]),
-  bloom: new Track([[0, 0.55], [0.27, 0.7], [0.34, 0.75], [0.5, 0.5], [0.68, 0.7], [0.84, 0.55], [0.93, 0.8], [1, 0.6]]),
-  heat: new Track([[0, 0.25], [0.14, 0.5], [0.24, 0.75], [0.29, 1.15], [0.36, 1.0], [0.46, 0.55], [0.82, 0.5], [0.86, 0.2], [1, 0]]),
-  pyre: new Track([[0, 0.75], [0.55, 0.9], [0.63, 1.2], [0.7, 1.45], [0.76, 1.1], [0.9, 0.8], [1, 0.6]]),
+  skyTop: new Track([[0, '#020203'], [0.86, '#030507'], [0.95, '#0a2a2c'], [1, '#0c3434']]),
+  skyMid: new Track([[0, '#1e0c08'], [0.6, '#2a1008'], [0.72, '#33130a'], [0.86, '#121a1c'], [0.95, '#3d8a82'], [1, '#4a9a90']]),
+  skyBot: new Track([[0, '#060404'], [0.86, '#050a0b'], [0.95, '#0b2224'], [1, '#0e2c2c']]),
+  fog: new Track([[0, '#0d0807'], [0.62, '#160a06'], [0.75, '#120806'], [0.86, '#0a1213'], [0.95, '#1d4a47'], [1, '#183e3b']]),
+  fogD: new Track([[0, 0.006], [0.15, 0.009], [0.62, 0.012], [0.86, 0.01], [0.95, 0.013], [1, 0.01]]),
+  exposure: new Track([[0, 0.95], [0.3, 1.05], [0.62, 1.0], [0.86, 0.95], [0.95, 1.1], [1, 1.05]]),
+  bloom: new Track([[0, 0.4], [0.3, 0.55], [0.68, 0.5], [0.93, 0.7], [1, 0.45]]),
+  embers: new Track([[0, 0.6], [0.5, 1], [0.72, 1], [0.9, 0.4], [1, 0.1]]),
+  heat: new Track([[0, 0.2], [0.14, 0.4], [0.24, 0.7], [0.29, 0.92], [0.36, 0.85], [0.46, 0.5], [0.82, 0.45], [0.86, 0.15], [1, 0]]),
+  pyre: new Track([[0, 0.8], [0.55, 0.95], [0.63, 1.2], [0.7, 1.45], [0.76, 1.1], [0.9, 0.8], [1, 0.6]]),
   coins: new Track([[0, 0], [0.6, 0], [0.64, 1], [0.73, 1], [0.77, 0]]),
   open: new Track([[0, 0], [0.865, 0], [0.935, 1], [1, 1]]),
   unlock: new Track([[0, 0], [0.84, 0], [0.87, 1], [1, 1]]),
   elys: new Track([[0, 0], [0.84, 0.05], [0.9, 0.75], [0.95, 1], [1, 1]]),
-  fov: new Track([[0, 46], [0.22, 42], [0.5, 54], [0.68, 48], [0.92, 58], [1, 50]]),
+  fov: new Track([[0, 40], [0.22, 36], [0.5, 48], [0.68, 42], [0.92, 52], [1, 46]]),
 };
 
-/* ---------- ciel ---------- */
+/* ---------- ciel : nuit couverte, nuages éclairés par en dessous ---------- */
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { uTop: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uTime: { value: 0 }, uStars: { value: 1 } },
+  uniforms: { uTop: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uTime: { value: 0 }, uStars: { value: 1 }, uGlow: { value: 1 } },
   vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
   fragmentShader: `
-    uniform vec3 uTop, uMid, uBot; uniform float uTime, uStars; varying vec3 vDir;
+    uniform vec3 uTop, uMid, uBot; uniform float uTime, uStars, uGlow; varying vec3 vDir;
     float h21(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5); }
+    float n2(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+      return mix(mix(h21(i), h21(i+vec2(1,0)), u.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), u.x), u.y); }
+    float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 6; i++) { s += a * n2(p); p = p * 2.03 + 1.7; a *= .5; } return s; }
     void main(){
       vec3 d = normalize(vDir); float h = d.y;
-      vec3 col = h > 0. ? mix(uMid, uTop, pow(clamp(h,0.,1.), .45)) : mix(uMid, uBot, pow(clamp(-h,0.,1.), .3));
-      vec2 g = vec2(atan(d.z, d.x) * 120., h * 160.); vec2 id = floor(g);
-      float s = step(.993, h21(id)) * smoothstep(.05, .4, h) * (.5 + .5 * sin(uTime * (1. + h21(id + 3.) * 3.) + h21(id) * 60.));
-      col += vec3(1., .9, .8) * s * uStars * .8;
+      vec3 col = h > 0. ? mix(uMid, uTop, pow(clamp(h,0.,1.), .4)) : mix(uMid, uBot, pow(clamp(-h,0.,1.), .3));
+      vec2 sp = d.xz / max(h + .15, .05) * .6;
+      float c = smoothstep(.45, .8, fbm(sp + vec2(uTime * .01, 0.)));
+      vec3 under = vec3(.32, .12, .05) * uGlow * smoothstep(.5, .0, h);
+      col = mix(col, col * .55 + under * c, c * smoothstep(-.02, .12, h));
+      vec2 g = vec2(atan(d.z, d.x) * 140., h * 180.); vec2 id = floor(g);
+      float s = step(.994, h21(id)) * smoothstep(.1, .5, h) * (1. - c) * (.6 + .4 * sin(uTime * (1. + h21(id + 3.) * 2.) + h21(id) * 60.));
+      col += vec3(.9, .9, 1.) * s * uStars * .5;
       gl_FragColor = vec4(col, 1.);
     }`,
 });
-const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMat);
+const sky = new THREE.Mesh(new THREE.SphereGeometry(700, 48, 24), skyMat);
 scene.add(sky);
 
-/* ---------- sol de basalte, fissuré de braise ---------- */
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(700, 700, 1, 1).rotateX(-Math.PI / 2),
-  new THREE.ShaderMaterial({
-    fog: false,
-    uniforms: { uTime: { value: 0 }, uHeat: { value: 0.5 }, uPyre: { value: 1 }, uFog: { value: new THREE.Color() }, uFogD: { value: 0.012 }, uElys: { value: 0 } },
-    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform float uTime, uHeat, uPyre, uFogD, uElys; uniform vec3 uFog; varying vec3 vW;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
-        return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y); }
-      float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * n(p); p *= 2.03; a *= .5; } return s; }
-      void main(){
-        vec2 p = vW.xz * .16;
-        float f = fbm(p);
-        float c1 = 1. - smoothstep(0., .03, abs(f - .5));
-        float c2 = 1. - smoothstep(0., .02, abs(fbm(p * 2.3 + 7.) - .5));
-        float near = exp(-length(vW.xz - vec2(0., -36.)) * .055) * uPyre + exp(-length(vW.xz - vec2(0., -60.)) * .045) * uHeat;
-        float beyond = smoothstep(-61., -66., vW.z);
-        float heat = (c1 * .7 + c2 * .25) * (.035 + near * .5) * (1. - beyond);
-        vec3 base = mix(vec3(.03, .022, .024), vec3(.07, .05, .052), fbm(p * 4.));
-        base = mix(base, vec3(.03, .07, .07), beyond * uElys);
-        vec3 col = base + vec3(1., .36, .08) * heat * (.65 + .35 * sin(uTime * 1.3 + f * 20.));
-        col += vec3(.45, .95, .88) * beyond * uElys * (c1 * .25 + .04);
-        float fg = 1. - exp(-pow(length(cameraPosition - vW) * uFogD, 2.)); col = mix(col, uFog, fg);
-        gl_FragColor = vec4(col, 1.);
-      }`,
-  }),
-);
-ground.position.z = GATE_Z;
-scene.add(ground);
+/* ---------- sol ---------- */
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(500, 500).rotateX(-Math.PI / 2),
+  new THREE.MeshStandardMaterial({ ...FLAG, color: '#ffffff', envMapIntensity: 0.12 }));
+ground.position.z = GATE_Z; ground.receiveShadow = true; scene.add(ground);
 
 /* ---------- lumières ---------- */
-const hemi = new THREE.HemisphereLight('#6a7c86', '#2a0d07', 0.55); scene.add(hemi);
-const moon = new THREE.DirectionalLight('#9fb8c4', 0.9); moon.position.set(-40, 80, 30); scene.add(moon);
-const pyreLight = new THREE.PointLight('#ff7a2a', 140, 90, 1.7); pyreLight.position.set(0, 5, PYRE.z); scene.add(pyreLight);
-const brazierLights = [-1, 1].map((s) => { const l = new THREE.PointLight('#ff8a3d', 90, 40, 1.8); l.position.set(s * 10, 7, -50); scene.add(l); return l; });
-const elysLight = new THREE.PointLight('#8fe8dc', 0, 120, 1.4); elysLight.position.set(0, 12, GATE_Z - 8); scene.add(elysLight);
+const hemi = new THREE.HemisphereLight('#3a4a56', '#140806', 0.12); scene.add(hemi);
+const moon = new THREE.DirectionalLight('#7f9bb0', 0.35); moon.position.set(-60, 90, 40); moon.target.position.set(0, 0, -50);
+moon.castShadow = true; moon.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
+Object.assign(moon.shadow.camera, { left: -60, right: 60, top: 60, bottom: -40, near: 10, far: 260 }); moon.shadow.bias = -0.0004;
+scene.add(moon, moon.target);
+const pyreLight = new THREE.PointLight('#ff7a2a', 160, 120, 1.8); pyreLight.position.set(PYRE.x, 5.5, PYRE.z);
+pyreLight.castShadow = true; pyreLight.shadow.mapSize.set(mobile ? 512 : 1024, mobile ? 512 : 1024); pyreLight.shadow.bias = -0.002; pyreLight.shadow.radius = 4;
+scene.add(pyreLight);
+const brazierLights = [-1, 1].map((s) => { const l = new THREE.PointLight('#ff8a3d', 45, 45, 1.8); l.position.set(s * 13, 7.5, -51); scene.add(l); return l; });
+const elysLight = new THREE.PointLight('#a9f0e6', 0, 140, 1.4); elysLight.position.set(0, 12, GATE_Z - 10); scene.add(elysLight);
 
-/* ---------- le rempart et la porte ---------- */
-const stone = new THREE.MeshStandardMaterial({ color: '#2a2224', roughness: 0.92, metalness: 0.05 });
-const stoneDark = new THREE.MeshStandardMaterial({ color: '#1a1416', roughness: 0.95 });
-const iron = new THREE.MeshStandardMaterial({ color: '#3a2c28', roughness: 0.42, metalness: 0.75, emissive: new THREE.Color('#ff4a12'), emissiveIntensity: 0.05 });
-const box = (w, hgt, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), mat); m.position.set(x, y, z); scene.add(m); return m; };
+/* ---------- maçonnerie ---------- */
+const stoneMat = new THREE.MeshStandardMaterial({ ...STONE, color: '#ffffff', envMapIntensity: 0.25 });
+// UV à l'échelle du monde : une texture couvre 4 m, sur chaque face
+function worldUV(geo, w, h, d, unit = 7) {
+  const uv = geo.attributes.uv, n = geo.attributes.normal;
+  for (let i = 0; i < uv.count; i++) {
+    const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
+    const [su, sv] = nx > 0.5 ? [d, h] : ny > 0.5 ? [w, d] : [w, h];
+    uv.setXY(i, uv.getX(i) * su / unit, uv.getY(i) * sv / unit);
+  }
+  return geo;
+}
+const stoneBox = (w, h, d, x, y, z, mat = stoneMat) => {
+  const m = new THREE.Mesh(worldUV(new RoundedBoxGeometry(w, h, d, 2, 0.12), w, h, d), mat);
+  m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; scene.add(m); return m;
+};
 [-1, 1].forEach((s) => {
-  box(6, 32, 7, stone, s * 11, 16, GATE_Z);              // pilier
-  box(8, 2, 9, stoneDark, s * 11, 33, GATE_Z);           // chapiteau
-  box(8, 2.4, 9, stoneDark, s * 11, 1.2, GATE_Z);        // socle
-  box(48, 20, 5, stoneDark, s * 38, 10, GATE_Z - 0.5);   // rempart
-  box(48, 1.6, 6, stone, s * 38, 20.6, GATE_Z - 0.5);
-  for (let i = 0; i < 9; i++) box(2.6, 2.4, 6, stone, s * (17 + i * 5.2), 22.6, GATE_Z - 0.5); // créneaux
+  stoneBox(6, 30, 7, s * 11, 15, GATE_Z);                 // piliers
+  stoneBox(7.4, 1.6, 8.4, s * 11, 30.8, GATE_Z);          // corniches
+  stoneBox(7.4, 1.8, 8.4, s * 11, 0.9, GATE_Z);           // socles
+  stoneBox(48, 22, 5, s * 38, 11, GATE_Z - 0.5);          // courtines
+  stoneBox(48, 1.4, 6, s * 38, 22.7, GATE_Z - 0.5);
+  for (let i = 0; i < 8; i++) stoneBox(3, 2.6, 5.6, s * (18 + i * 5.6), 24.6, GATE_Z - 0.5); // merlons
 });
-box(30, 4, 8, stone, 0, 31, GATE_Z);                     // linteau
-const arch = new THREE.Mesh(new THREE.TorusGeometry(8, 0.9, 12, 48, Math.PI), stoneDark);
-arch.position.set(0, 22, GATE_Z + 3.6); scene.add(arch);
-// la lumière d'Elysium, derrière les battants
-const elysMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
-  uniforms: { uOpen: { value: 0 }, uTime: { value: 0 } },
-  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-  fragmentShader: `uniform float uOpen, uTime; varying vec2 vUv;
-    void main(){ vec2 q = vUv - vec2(.5, .35); float r = length(q * vec2(1., .8));
-      vec3 c = mix(vec3(1.), vec3(.56, .91, .86), smoothstep(0., .5, r));
-      float rays = .75 + .25 * sin(atan(q.y, q.x) * 14. + uTime * .3);
-      gl_FragColor = vec4(c * (1.05 + rays * .35), uOpen * (1. - smoothstep(.35, .75, r) * .6)); }`,
-});
-const elysPlane = new THREE.Mesh(new THREE.PlaneGeometry(16, 22), elysMat);
-elysPlane.position.set(0, 11, GATE_Z - 1.2); scene.add(elysPlane);
-const elysGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color('#8fe8dc').multiplyScalar(1.6), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
-elysGlow.scale.set(70, 50, 1); elysGlow.position.set(0, 12, GATE_Z - 30); scene.add(elysGlow);
+// arc en voussoirs au-dessus de la porte, et tympan
+{
+  const R = 8, r = 6.6, n = 13;
+  for (let i = 0; i < n; i++) {
+    const a0 = Math.PI - (i / n) * Math.PI, a1 = Math.PI - ((i + 1) / n) * Math.PI;
+    const sh = new THREE.Shape();
+    sh.moveTo(Math.cos(a0) * r, Math.sin(a0) * r); sh.lineTo(Math.cos(a0) * R, Math.sin(a0) * R);
+    sh.absarc(0, 0, R, a0, a1, true); sh.lineTo(Math.cos(a1) * r, Math.sin(a1) * r); sh.absarc(0, 0, r, a1, a0, false);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 7, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 1, curveSegments: 4 });
+    g.translate(0, 0, -3.5);
+    const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) / 4 + i * 0.13, uv.getY(k) / 4);
+    const m = new THREE.Mesh(g, stoneMat); m.position.set(0, 20, GATE_Z); m.castShadow = m.receiveShadow = true; scene.add(m);
+  }
+  stoneBox(30, 6, 7, 0, 30, GATE_Z);                       // assise au-dessus de l'arc
+  stoneBox(4, 8.6, 7, -10, 24.5, GATE_Z); stoneBox(4, 8.6, 7, 10, 24.5, GATE_Z); // écoinçons
+  const tym = new THREE.Mesh(worldUV(new THREE.CircleGeometry(6.7, 32, 0, Math.PI), 13, 6.7, 1), stoneMat);
+  tym.position.set(0, 20, GATE_Z - 0.4); tym.receiveShadow = true; scene.add(tym);
+}
 
-// les deux battants, chacun tourne autour de son gond
+/* ---------- les vantaux : chêne cerclé de fer ---------- */
+const woodMat = new THREE.MeshStandardMaterial({ ...WOOD, color: '#ffffff', envMapIntensity: 0.2 });
+const ironMat = new THREE.MeshStandardMaterial({ ...IRON, color: '#ffffff', metalness: 0.85, envMapIntensity: 0.9 });
+const steelMat = new THREE.MeshStandardMaterial({ color: '#9a9690', metalness: 1, roughness: 0.32, envMapIntensity: 1.2 });
 function makeDoor(side) {
   const g = new THREE.Group(); g.position.set(side * 8, 0, GATE_Z);
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(8, 22, 1.2), iron); leaf.position.set(-side * 4, 11, 0); g.add(leaf);
-  const band = new THREE.MeshStandardMaterial({ color: '#241a18', roughness: 0.5, metalness: 0.8 });
-  [3, 8.5, 14, 19.5].forEach((y) => { const b = new THREE.Mesh(new THREE.BoxGeometry(8, 0.6, 0.3), band); b.position.set(-side * 4, y, 0.72); g.add(b); });
-  const studs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 8, 6), band, 4 * 8);
-  const d = new THREE.Object3D(); let k = 0;
-  for (let i = 0; i < 4; i++) for (let j = 0; j < 8; j++) { d.position.set(-side * (1.2 + i * 1.9), 1.6 + j * 2.7, 0.75); d.updateMatrix(); studs.setMatrixAt(k++, d.matrix); }
-  g.add(studs);
+  const leaf = new THREE.Mesh(worldUV(new THREE.BoxGeometry(8, 20, 0.9), 8, 20, 0.9, 8), woodMat);
+  leaf.position.set(-side * 4, 10, 0); leaf.castShadow = leaf.receiveShadow = true; g.add(leaf);
+  const rivetGeo = new THREE.SphereGeometry(0.13, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
+  const rivets = new THREE.InstancedMesh(rivetGeo, ironMat, 4 * 9); let k = 0; const d = new THREE.Object3D();
+  [2.4, 7.4, 12.6, 17.6].forEach((y) => {
+    const strap = new THREE.Mesh(worldUV(new THREE.BoxGeometry(7.6, 0.75, 0.16), 7.6, 0.75, 0.16, 2), ironMat);
+    strap.position.set(-side * 4, y, 0.53); strap.castShadow = true; g.add(strap);
+    for (let i = 0; i < 9; i++) { d.position.set(-side * (0.5 + i * 0.88), y, 0.62); d.updateMatrix(); rivets.setMatrixAt(k++, d.matrix); }
+  });
+  rivets.castShadow = true; g.add(rivets);
+  // anneau de tirage
+  const ringPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.12, 24).rotateX(Math.PI / 2), ironMat);
+  ringPlate.position.set(-side * 6.3, 9.6, 0.52); g.add(ringPlate);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.09, 12, 40), ironMat);
+  ring.position.set(-side * 6.3, 8.95, 0.66); ring.rotation.x = 0.25; ring.castShadow = true; g.add(ring);
   scene.add(g); return g;
 }
 const doors = [makeDoor(-1), makeDoor(1)];
+// la lumière derrière les vantaux, quand ils s'ouvrent
+const elysMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending,
+  uniforms: { uOpen: { value: 0 }, uTime: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform float uOpen, uTime; varying vec2 vUv;
+    void main(){ vec2 q = vUv - vec2(.5, .3); float r = length(q * vec2(1.2, .9));
+      vec3 c = mix(vec3(1., .98, .94), vec3(.55, .88, .84), smoothstep(0., .55, r));
+      gl_FragColor = vec4(c * (1.1 - smoothstep(.2, .8, r) * .7) * uOpen, 1.); }`,
+});
+const elysPlane = new THREE.Mesh(new THREE.PlaneGeometry(16, 27), elysMat);
+elysPlane.position.set(0, 13.5, GATE_Z - 1.4); scene.add(elysPlane);
+// rais de lumière dans la brume
+const shaftMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  uniforms: { uOpen: { value: 0 }, uTime: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform float uOpen, uTime; varying vec2 vUv;
+    float h(float x){ return fract(sin(x * 91.7) * 4375.5); }
+    void main(){ float band = .5 + .5 * sin(vUv.x * 40. + h(floor(vUv.x * 12.)) * 6. + uTime * .15);
+      float a = band * smoothstep(0., .25, vUv.x) * smoothstep(1., .75, vUv.x) * smoothstep(1., .0, vUv.y) * .07 * uOpen;
+      gl_FragColor = vec4(vec3(.75, .95, .9) * a, 1.); }`,
+});
+const shafts = new THREE.Mesh(new THREE.PlaneGeometry(16, 60, 1, 1), shaftMat);
+shafts.rotation.x = -Math.PI / 2 + 0.25; shafts.position.set(0, 10, GATE_Z + 26); scene.add(shafts);
 
-/* ---------- les chaînes en X et le cadenas ---------- */
-const chainMat = new THREE.MeshStandardMaterial({ color: '#6a5a50', roughness: 0.35, metalness: 0.95, emissive: new THREE.Color('#ff5a1a'), emissiveIntensity: 0.1, transparent: true });
-const chainLines = [[[-7.4, 20.5], [7.4, 2.5]], [[7.4, 20.5], [-7.4, 2.5]]];
+/* ---------- chaînes et cadenas ---------- */
+const chainMat = new THREE.MeshStandardMaterial({ ...IRON, color: '#5e5954', metalness: 0.9, envMapIntensity: 0.6, emissive: new THREE.Color('#ff5a1a'), emissiveIntensity: 0, transparent: true });
+const chainLines = [[[-7.2, 18.6], [7.2, 2.6]], [[7.2, 18.6], [-7.2, 2.6]]];
 const links = [];
 for (const [[x0, y0], [x1, y1]] of chainLines) {
-  const a = new THREE.Vector3(x0, y0, GATE_Z + 1.1), b = new THREE.Vector3(x1, y1, GATE_Z + 1.1);
+  const a = new THREE.Vector3(x0, y0, GATE_Z + 0.85), b = new THREE.Vector3(x1, y1, GATE_Z + 0.85);
   const dir = b.clone().sub(a); const len = dir.length(); dir.normalize();
-  const n = Math.floor(len / 0.62);
-  for (let i = 0; i <= n; i++) links.push({ p: a.clone().addScaledVector(dir, i * 0.62), dir, twist: i % 2 });
+  const n = Math.floor(len / 0.56);
+  for (let i = 0; i <= n; i++) { const p = a.clone().addScaledVector(dir, i * 0.56); p.z += Math.sin((i / n) * Math.PI) * 0.12; links.push({ p, dir, twist: i % 2 }); }
 }
-const chain = new THREE.InstancedMesh(new THREE.TorusGeometry(0.34, 0.09, 6, 14), chainMat, links.length);
+const chain = new THREE.InstancedMesh(new THREE.TorusGeometry(0.3, 0.085, 10, 20), chainMat, links.length);
 {
   const d = new THREE.Object3D(); const X = new THREE.Vector3(1, 0, 0);
   links.forEach((l, i) => {
     d.position.copy(l.p); d.quaternion.setFromUnitVectors(X, l.dir);
     if (l.twist) d.rotateX(Math.PI / 2);
-    d.scale.set(1.45, 1, 1); d.updateMatrix(); chain.setMatrixAt(i, d.matrix);
+    d.scale.set(1.5, 1, 1); d.updateMatrix(); chain.setMatrixAt(i, d.matrix);
   });
 }
-scene.add(chain);
+chain.castShadow = true; chain.receiveShadow = true; scene.add(chain);
 
-const lockMat = new THREE.MeshStandardMaterial({ color: '#5a4a40', roughness: 0.32, metalness: 0.95, emissive: new THREE.Color('#ff4a12'), emissiveIntensity: 0.1 });
+const lockMat = new THREE.MeshStandardMaterial({ ...IRON, color: '#a8a09a', metalness: 0.92, envMapIntensity: 0.7,
+  emissive: new THREE.Color('#ff3a0a'), emissiveMap: HEAT_MAP, emissiveIntensity: 0 });
 const padlock = new THREE.Group();
-const lockBody = new THREE.Mesh(new RoundedBoxGeometry(4.2, 3.6, 1.6, 4, 0.35), lockMat);
+{
+  const w = 4.2, h = 3.8, r = 0.55; const sh = new THREE.Shape();
+  sh.moveTo(-w / 2 + r, -h / 2); sh.lineTo(w / 2 - r, -h / 2); sh.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  sh.lineTo(w / 2, h / 2 - r); sh.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2); sh.lineTo(-w / 2 + r, h / 2);
+  sh.quadraticCurveTo(-w / 2, h / 2, -w / 2, h / 2 - r); sh.lineTo(-w / 2, -h / 2 + r); sh.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 1.3, bevelEnabled: true, bevelThickness: 0.18, bevelSize: 0.16, bevelSegments: 4, curveSegments: 10 });
+  g.translate(0, 0, -0.65);
+  const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) / 4.4 + 0.5, uv.getY(k) / 4.4 + 0.5);
+  const body = new THREE.Mesh(g, lockMat); body.castShadow = true; body.receiveShadow = true; padlock.add(body);
+  // plaque de serrure en laiton et entrée de clé
+  const brass = new THREE.MeshStandardMaterial({ color: '#8a6a3a', metalness: 1, roughness: 0.38, envMapIntensity: 1.2 });
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.08, 32).rotateX(Math.PI / 2), brass); plate.position.set(0, -0.2, 0.86); padlock.add(plate);
+  const hole = new THREE.Shape(); hole.absarc(0, 0.12, 0.16, 0, Math.PI * 2);
+  const keyhole = new THREE.Mesh(new THREE.ShapeGeometry(hole), new THREE.MeshBasicMaterial({ color: '#000000' })); keyhole.position.set(0, -0.2, 0.905); padlock.add(keyhole);
+  const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.42), new THREE.MeshBasicMaterial({ color: '#000000' })); slot.position.set(0, -0.42, 0.905); padlock.add(slot);
+}
 const shackle = new THREE.Group();
-const shArc = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.34, 14, 40, Math.PI), lockMat); shArc.position.y = 2.6;
-const legGeo = new THREE.CylinderGeometry(0.34, 0.34, 1.5, 14);
-const legL = new THREE.Mesh(legGeo, lockMat); legL.position.set(-1.45, 1.85, 0);
-const legR = new THREE.Mesh(legGeo, lockMat); legR.position.set(1.45, 1.85, 0);
-shackle.add(shArc, legL, legR);
-const keyMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.4, 0.5) });
-const keyhole = new THREE.Group();
-const kh1 = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), keyMat); kh1.position.set(0, 0.15, 0.81);
-const kh2 = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.75), keyMat); kh2.position.set(0, -0.3, 0.81);
-keyhole.add(kh1, kh2);
-const lockHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color('#ff7a2a'), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
-lockHalo.scale.setScalar(7);
-padlock.add(lockBody, shackle, keyhole, lockHalo);
-const LOCK_HOME = new THREE.Vector3(0, 10.2, GATE_Z + 2.2);
+{
+  const arc = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.3, 20, 48, Math.PI), steelMat); arc.position.y = 2.75;
+  const legGeo = new THREE.CylinderGeometry(0.3, 0.3, 1.6, 20);
+  const l = new THREE.Mesh(legGeo, steelMat); l.position.set(-1.4, 1.95, 0);
+  const r = new THREE.Mesh(legGeo, steelMat); r.position.set(1.4, 1.95, 0);
+  [arc, l, r].forEach((m) => { m.castShadow = true; shackle.add(m); });
+}
+padlock.add(shackle);
+const LOCK_HOME = new THREE.Vector3(0, 9.4, GATE_Z + 1.7);
 padlock.position.copy(LOCK_HOME);
 scene.add(padlock);
 
-/* ---------- le bûcher et les braseros ---------- */
-const bowl = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 2.4, 1.8, 40, 1, true), new THREE.MeshStandardMaterial({ color: '#2a1e1c', roughness: 0.5, metalness: 0.7, side: THREE.DoubleSide }));
-bowl.position.set(PYRE.x, 1.6, PYRE.z); scene.add(bowl);
-const rim = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.18, 10, 60), new THREE.MeshStandardMaterial({ color: '#3a2a22', metalness: 0.8, roughness: 0.4, emissive: new THREE.Color('#ff5a1a'), emissiveIntensity: 0.4 }));
-rim.rotation.x = Math.PI / 2; rim.position.set(PYRE.x, 2.5, PYRE.z); scene.add(rim);
-box(9, 0.8, 9, stoneDark, PYRE.x, 0.4, PYRE.z);
-box(7, 0.8, 7, stone, PYRE.x, 1.0, PYRE.z).rotation.y = Math.PI / 4;
-const embersBed = new THREE.Mesh(new THREE.CircleGeometry(3.2, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.9, 0.25) }));
-embersBed.position.set(PYRE.x, 2.2, PYRE.z); scene.add(embersBed);
-[-1, 1].forEach((s) => {
-  const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 5, 16), stoneDark); ped.position.set(s * 10, 2.5, -50); scene.add(ped);
-  const cup = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.9, 0.9, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#2a1e1c', metalness: 0.7, roughness: 0.5, side: THREE.DoubleSide }));
-  cup.position.set(s * 10, 5.4, -50); scene.add(cup);
-});
-
-// flammes : particules qui montent, du blanc au rouge sombre
-function makeFire({ at, spread, height, count, size }) {
-  const pos = new Float32Array(count * 3), seed = new Float32Array(count * 4);
-  for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random());
-    pos.set([Math.cos(a) * r * spread, 0, Math.sin(a) * r * spread], i * 3);
-    seed.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aS', new THREE.BufferAttribute(seed, 4));
-  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 }, uScale: { value: pointScale() }, uSize: { value: size }, uH: { value: height }, uAmt: { value: 1 } },
-    vertexShader: `attribute vec4 aS; uniform float uTime, uScale, uSize, uH, uAmt; varying float vK; varying float vS;
-      void main(){ float life = .7 + aS.x * .7; float k = fract(uTime / life + aS.y);
-        vec3 p = position; p.xz *= (1. - k * .9);
-        p.x += sin(uTime * 3.1 + aS.z * 20. + k * 5.) * .35 * k; p.z += cos(uTime * 2.7 + aS.w * 17.) * .25 * k;
-        p.y += k * uH * (.55 + aS.w * .6) * (.6 + .4 * uAmt);
-        vK = k; vS = aS.z;
-        vec4 mv = modelViewMatrix * vec4(p, 1.);
-        gl_PointSize = uSize * (1. - k * .65) * (.6 + aS.w) * (.7 + .3 * uAmt) * uScale / -mv.z;
-        gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform float uAmt; varying float vK; varying float vS;
-      void main(){ float d = length(gl_PointCoord - .5);
-        vec3 c = mix(vec3(1., .82, .5), vec3(1., .42, .1), smoothstep(.0, .25, vK));
-        c = mix(c, vec3(.55, .08, .02), smoothstep(.3, .75, vK));
-        float a = pow(smoothstep(.5, 0., d), 1.6) * pow(1. - vK, 1.5) * smoothstep(0., .08, vK) * (.35 + .3 * uAmt) * .32;
-        gl_FragColor = vec4(c * 1.15, a); }`,
-  });
-  const pts = new THREE.Points(geo, mat); pts.position.copy(at); pts.frustumCulled = false; scene.add(pts); return pts;
+/* ---------- le bûcher : vasque de fer, bûches, braseros ---------- */
+function lathe(points, mat, x, y, z, segs = 48) {
+  const m = new THREE.Mesh(new THREE.LatheGeometry(points.map(([a, b]) => new THREE.Vector2(a, b)), segs), mat);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; scene.add(m); return m;
 }
-const pyreFire = makeFire({ at: new THREE.Vector3(PYRE.x, 2.3, PYRE.z), spread: 2.4, height: 10, count: mobile ? 450 : 900, size: 2.0 });
-const brazierFires = [-1, 1].map((s) => makeFire({ at: new THREE.Vector3(s * 10, 5.6, -50), spread: 0.9, height: 4.5, count: mobile ? 140 : 260, size: 1.3 }));
-const doorFire = makeFire({ at: new THREE.Vector3(0, 0.2, GATE_Z + 1.8), spread: 7.5, height: 2.4, count: mobile ? 200 : 400, size: 0.8 });
-doorFire.geometry.attributes.position.array.forEach((v, i, arr) => { if (i % 3 === 2) arr[i] = v * 0.15; });
-doorFire.geometry.attributes.position.needsUpdate = true;
-
-// fumée au-dessus du bûcher
-const smoke = Array.from({ length: mobile ? 8 : 14 }, (_, i) => {
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE[i % 3], color: '#2a1612', transparent: true, depthWrite: false, opacity: 0 }));
-  s.userData = { phase: i / 14, x: rand(-1.5, 1.5), spin: rand(-0.2, 0.2) }; scene.add(s); return s;
+const bowlMat = new THREE.MeshStandardMaterial({ ...IRON, color: '#ffffff', metalness: 0.85, envMapIntensity: 0.8, side: THREE.DoubleSide });
+lathe([[0, 0], [1.6, 0.1], [2.8, 0.7], [3.6, 1.7], [3.85, 2.3], [3.95, 2.45], [3.7, 2.4], [3.4, 1.9], [2.6, 1.1], [0, 0.6]], bowlMat, PYRE.x, 1.6, PYRE.z);
+lathe([[0, 0], [1.2, 0], [1.0, 0.4], [0.7, 1.7], [1.1, 1.9], [0, 1.9]], bowlMat, PYRE.x, 0, PYRE.z, 24);
+stoneBox(10, 0.5, 10, PYRE.x, 0.25, PYRE.z).rotation.y = Math.PI / 4;
+const charMat = new THREE.MeshStandardMaterial({ ...CHAR, color: '#ffffff', emissive: new THREE.Color('#ffffff'), emissiveMap: CHAR_EMIT, emissiveIntensity: 1.6 });
+const logs = [];
+for (let i = 0; i < 7; i++) {
+  const a = (i / 7) * Math.PI * 2; const log = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 4.2, 14, 1), charMat);
+  log.position.set(PYRE.x + Math.cos(a) * 0.9, 3.3, PYRE.z + Math.sin(a) * 0.9);
+  log.rotation.set(0, -a, 1.15); log.rotateY(0.3); log.castShadow = true; scene.add(log); logs.push(log);
+}
+[-1, 1].forEach((s) => {
+  stoneBox(2.2, 5, 2.2, s * 13, 2.5, -51);
+  lathe([[0, 0], [1.0, 0.1], [1.7, 0.6], [1.9, 1.1], [1.75, 1.05], [1.5, 0.7], [0, 0.4]], bowlMat, s * 13, 5, -51, 32);
 });
 
-// braises qui montent dans l'air
-function makeMotes({ count, min, max, color, size, rise }) {
+/* ---------- feu : flammes en shader (bruit qui monte, rampe de température) ---------- */
+const flameVert = `uniform vec3 uCenter; uniform vec2 uSize; varying vec2 vUv;
+  void main(){ vUv = uv; vec3 right = normalize(vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]));
+    vec3 p = uCenter + right * position.x * uSize.x + vec3(0., 1., 0.) * position.y * uSize.y;
+    gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.); }`;
+const flameFrag = `uniform float uTime, uSeed, uAmt, uBright; varying vec2 vUv;
+  float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+    return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+  float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * n(p); p = p * 2.07 + 3.1; a *= .5; } return s; }
+  void main(){
+    vec2 uv = vUv; float t = uTime * 1.35 + uSeed * 17.;
+    float q = fbm(vec2(uv.x * 3. + uSeed, uv.y * 2.2 - t));
+    float r = fbm(vec2(uv.x * 7. - uSeed, uv.y * 5.5 - t * 1.8) + q);
+    float x = uv.x - .5 + (q - .5) * .32 * uv.y;
+    float width = mix(.46, .07, pow(uv.y, .7)) * (.8 + .2 * uAmt);
+    float shape = smoothstep(width, width * .2, abs(x));
+    float body = shape * (.3 + r * 1.05) * smoothstep(0., .07, uv.y) - uv.y * (.95 - .2 * uAmt);
+    float temp = clamp(body * 1.45, 0., 1.);
+    vec3 col = mix(vec3(.45, .05, .0), vec3(1., .3, .04), smoothstep(.0, .35, temp));
+    col = mix(col, vec3(1., .66, .25), smoothstep(.35, .7, temp));
+    col = mix(col, vec3(1., .88, .62), smoothstep(.82, 1., temp));
+    float a = smoothstep(.0, .3, body);
+    gl_FragColor = vec4(col * (.75 + temp * 1.15) * a * uBright, 1.); }`;
+const flameGeo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+function makeFlames(at, w, h, count, bright = 1) {
+  return Array.from({ length: count }, (_, i) => {
+    const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+      uniforms: { uTime: { value: 0 }, uSeed: { value: i * 1.37 + at.x * 0.1 }, uAmt: { value: 1 }, uBright: { value: bright },
+        uCenter: { value: at.clone().add(new THREE.Vector3((i - (count - 1) / 2) * w * 0.12, 0, ((i % 2) - 0.5) * w * 0.12)) },
+        uSize: { value: new THREE.Vector2(w * (1 - i * 0.08), h * (1 - (i % 3) * 0.1)) } },
+      vertexShader: flameVert, fragmentShader: flameFrag });
+    const m = new THREE.Mesh(flameGeo, mat); m.frustumCulled = false; scene.add(m); return m;
+  });
+}
+const pyreFlames = makeFlames(new THREE.Vector3(PYRE.x, 3.0, PYRE.z), 6.4, 9, 4, 0.5);
+const brazierFlames = [-1, 1].map((s) => makeFlames(new THREE.Vector3(s * 13, 5.8, -51), 3.0, 4.2, 3, 0.7));
+const allFlames = [...pyreFlames, ...brazierFlames.flat()];
+
+// fumée : volutes sombres éclairées par en dessous
+const smokeMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
+  uniforms: { uTime: { value: 0 }, uAmt: { value: 1 }, uCenter: { value: new THREE.Vector3(PYRE.x, 9, PYRE.z) }, uSize: { value: new THREE.Vector2(16, 34) } },
+  vertexShader: flameVert,
+  fragmentShader: `uniform float uTime, uAmt; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+      return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+    float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * n(p); p = p * 2.03 + 1.9; a *= .5; } return s; }
+    void main(){ vec2 uv = vUv; float t = uTime * .12;
+      float q = fbm(vec2(uv.x * 2.5, uv.y * 1.6 - t));
+      float d = fbm(vec2(uv.x * 4. + q, uv.y * 3. - t * 1.4));
+      float spread = mix(.12, .5, uv.y);
+      float mask = smoothstep(spread, spread * .3, abs(uv.x - .5 + (q - .5) * .3)) * smoothstep(0., .15, uv.y) * smoothstep(1., .55, uv.y);
+      float a = smoothstep(.42, .78, d) * mask * .55 * uAmt;
+      vec3 c = mix(vec3(.32, .14, .06), vec3(.06, .05, .05), smoothstep(.05, .4, uv.y));
+      gl_FragColor = vec4(c, a); }`,
+});
+const smoke = new THREE.Mesh(flameGeo, smokeMat); smoke.frustumCulled = false; scene.add(smoke);
+
+// étincelles : rares, petites, qui montent vite
+function makeSparks({ count, min, max, size, rise }) {
   const pos = new Float32Array(count * 3), seed = new Float32Array(count);
   for (let i = 0; i < count; i++) { pos.set([rand(min[0], max[0]), rand(min[1], max[1]), rand(min[2], max[2])], i * 3); seed[i] = Math.random(); }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    uniforms: { uTime: { value: 0 }, uScale: { value: pointScale() }, uSize: { value: size }, uRise: { value: rise }, uOpacity: { value: 1 },
-      uMinY: { value: min[1] }, uMaxY: { value: max[1] }, uColor: { value: new THREE.Color(color).multiplyScalar(2.2) } },
-    vertexShader: `attribute float aSeed; uniform float uTime, uScale, uSize, uRise, uMinY, uMaxY; varying float vA;
+    uniforms: { uTime: { value: 0 }, uScale: { value: innerHeight * renderer.getPixelRatio() * 0.5 }, uSize: { value: size }, uRise: { value: rise }, uOpacity: { value: 1 },
+      uMinY: { value: min[1] }, uMaxY: { value: max[1] } },
+    vertexShader: `attribute float aSeed; uniform float uTime, uScale, uSize, uRise, uMinY, uMaxY; varying float vA; varying float vK;
       void main(){ vec3 p = position; float span = uMaxY - uMinY;
-        p.y = uMinY + mod(p.y - uMinY + uTime * uRise * (.4 + aSeed), span);
-        p.x += sin(uTime * .8 + aSeed * 30.) * .9; p.z += cos(uTime * .6 + aSeed * 17.) * .7;
-        float k = (p.y - uMinY) / span; vA = smoothstep(0., .1, k) * smoothstep(1., .7, k) * (.4 + .6 * sin(uTime * 4. + aSeed * 50.));
+        p.y = uMinY + mod(p.y - uMinY + uTime * uRise * (.5 + aSeed), span);
+        p.x += sin(uTime * 1.3 + aSeed * 30.) * .6; p.z += cos(uTime * 1.1 + aSeed * 17.) * .5;
+        float k = (p.y - uMinY) / span; vK = k; vA = smoothstep(0., .05, k) * smoothstep(1., .4, k) * step(.55, fract(aSeed * 7.3 + uTime * .2));
         vec4 mv = modelViewMatrix * vec4(p, 1.); gl_PointSize = uSize * uScale * (.5 + aSeed) / -mv.z; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform vec3 uColor; uniform float uOpacity; varying float vA;
-      void main(){ float d = length(gl_PointCoord - .5); gl_FragColor = vec4(uColor, smoothstep(.5, .0, d) * vA * uOpacity); }`,
+    fragmentShader: `uniform float uOpacity; varying float vA; varying float vK;
+      void main(){ float d = length(gl_PointCoord - .5); vec3 c = mix(vec3(1., .85, .5), vec3(1., .35, .08), vK);
+        gl_FragColor = vec4(c * 2.2, smoothstep(.5, .1, d) * vA * uOpacity); }`,
   });
   const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts); return pts;
 }
-const embers = makeMotes({ count: mobile ? 500 : 1100, min: [-40, 0, -70], max: [40, 40, 20], color: '#ff9a4a', size: 0.09, rise: 1.4 });
-const motes = makeMotes({ count: mobile ? 260 : 520, min: [-40, 0, -140], max: [40, 30, -64], color: '#8fe8dc', size: 0.14, rise: 0.5 });
+const sparks = makeSparks({ count: mobile ? 160 : 320, min: [-3, 4, -39], max: [3, 26, -33], size: 0.07, rise: 3.2 });
+const dust = makeSparks({ count: mobile ? 120 : 240, min: [-30, 0, -130], max: [30, 24, -64], size: 0.06, rise: 0.4 });
+dust.material.fragmentShader = `uniform float uOpacity; varying float vA; void main(){ float d = length(gl_PointCoord - .5); gl_FragColor = vec4(vec3(.7, 1., .95) * 1.5, smoothstep(.5, .1, d) * vA * uOpacity); }`;
 
-/* ---------- les pièces qui tombent dans le bûcher ---------- */
-const COINS = mobile ? 22 : 40;
-const coins = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.62, 0.62, 0.14, 28),
-  new THREE.MeshStandardMaterial({ color: '#ffcf6b', metalness: 0.95, roughness: 0.28, emissive: new THREE.Color('#ff8a2a'), emissiveIntensity: 0.35 }), COINS);
-coins.frustumCulled = false; scene.add(coins);
+/* ---------- pièces d'or qui tombent dans le bûcher ---------- */
+const COIN_N = (() => {
+  const s = 256, d = new Uint8ClampedArray(s * s * 4), H = new Float32Array(s * s);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const u = x / s - 0.5, v = y / s - 0.5, r = Math.hypot(u, v);
+    const rim = sm(0.43, 0.4, r) * sm(0.36, 0.39, r), ring = sm(0.3, 0.29, r) * sm(0.27, 0.28, r);
+    const star = sm(0.2, 0.17, r * (1 + 0.35 * Math.cos(Math.atan2(v, u) * 5)));
+    H[y * s + x] = rim + ring * 0.6 + star * 0.8 + fbm(N3, x / s, y / s, 16, 2) * 0.08;
+  }
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const h = (a, b) => H[Math.min(s - 1, Math.max(0, b)) * s + Math.min(s - 1, Math.max(0, a))];
+    const dx = (h(x + 1, y) - h(x - 1, y)) * 3, dy = (h(x, y + 1) - h(x, y - 1)) * 3, l = Math.hypot(dx, dy, 1), i = (y * s + x) * 4;
+    d[i] = (-dx / l * 0.5 + 0.5) * 255; d[i + 1] = (dy / l * 0.5 + 0.5) * 255; d[i + 2] = (1 / l * 0.5 + 0.5) * 255; d[i + 3] = 255;
+  }
+  const t = new THREE.DataTexture(d, s, s, THREE.RGBAFormat); t.needsUpdate = true; return t;
+})();
+const COINS = mobile ? 22 : 36;
+const coinGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.12, 40);
+const coins = new THREE.InstancedMesh(coinGeo, new THREE.MeshStandardMaterial({ color: '#e3b866', metalness: 1, roughness: 0.22, normalMap: COIN_N, envMapIntensity: 1.6 }), COINS);
+coins.frustumCulled = false; coins.castShadow = true; scene.add(coins);
 const coinDummy = new THREE.Object3D();
+setBoot(0.7); await frame();
 
 /* ---------- trajectoire de la caméra : [p, position, cible] ---------- */
 const CAM = [
-  [0.00, [0, 5, 40], [0, 11, -60]],
-  [0.10, [7, 6, 14], [0, 10, -58]],
-  [0.20, [1.5, 10.5, -44], [0, 10.4, -57.8]],
-  [0.30, [-7, 12, -47], [0, 10.6, -57.8]],
-  [0.42, [12, 20, -20], [0, 12, -58]],
-  [0.55, [0, 16, -18], [0, 3, -36]],
-  [0.66, [6, 7.5, -24], [0, 4, -36]],
-  [0.74, [-5, 7, -22], [0, 5, -36]],
-  [0.82, [0, 9, -16], [0, 12, -60]],
-  [0.89, [0, 10.5, -44], [0, 11, -64]],
-  [0.95, [0, 10.5, -64], [0, 11.5, -100]],
-  [1.00, [0, 11, -82], [0, 12, -130]],
+  [0.00, [0, 4.5, 42], [0, 11, -60]],
+  [0.10, [7, 5.5, 14], [0, 10, -58]],
+  [0.20, [2, 10.2, -44], [0, 9.6, -58.3]],
+  [0.30, [-8, 11.5, -45], [0, 9.8, -58.3]],
+  [0.42, [12, 18, -20], [0, 12, -58]],
+  [0.55, [0, 15, -18], [0, 3, -36]],
+  [0.66, [10, 8.5, -19], [0, 5, -36]],
+  [0.74, [-8, 8, -18], [0, 6, -36]],
+  [0.82, [0, 8.5, -14], [0, 12, -60]],
+  [0.89, [0, 10, -44], [0, 11, -64]],
+  [0.95, [0, 10, -64], [0, 11.5, -100]],
+  [1.00, [0, 10.5, -82], [0, 12, -130]],
 ];
 const camCurve = new THREE.CatmullRomCurve3(CAM.map((k) => new THREE.Vector3(...k[1])), false, 'centripetal');
 const lookCurve = new THREE.CatmullRomCurve3(CAM.map((k) => new THREE.Vector3(...k[2])), false, 'centripetal');
@@ -898,9 +1057,6 @@ function curveT(p) {
   const t = clamp((p - CAM[i - 1][0]) / (CAM[i][0] - CAM[i - 1][0]));
   return (i - 1 + t) / (CAM.length - 1);
 }
-
-setBoot(0.7);
-await frame();
 
 /* =========================================================
    DOM : panneaux, navigation, rail, flash, son
@@ -924,16 +1080,6 @@ document.querySelectorAll('[data-go]').forEach((el) => el.addEventListener('clic
   e.preventDefault(); scrollTo({ top: +el.dataset.go * scrollMax(), behavior: reduced ? 'auto' : 'smooth' });
 }));
 
-// cartes des rituels
-const ritualCards = document.getElementById('ritualCards');
-CONFIG.rituals.forEach((r) => {
-  const el = document.createElement('a'); el.className = 'card'; el.href = `app.html#${r.mode}`; el.style.setProperty('--c', r.color);
-  el.innerHTML = `<img src="${ritualPortrait(r.draw, r.color)}" alt="" />
-    <header><h3>${r.name}</h3><small>${r.tag}</small></header>
-    <dl><dt>Opens</dt><dd>${r.opens}</dd><dt>Withdrawable</dt><dd>${r.back}</dd><dt>Fee</dt><dd>0.1 HYPE</dd></dl>`;
-  ritualCards.append(el);
-});
-
 // son : nappe grave et crépitement, le filtre s'ouvre avec la chaleur
 const soundBtn = document.querySelector('.sound');
 let audio = null;
@@ -948,7 +1094,6 @@ function createPad() {
     const lfo = ctx.createOscillator(); lfo.frequency.value = rand(0.05, 0.15); const lg = ctx.createGain(); lg.gain.value = 0.03;
     lfo.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(lp); o.start(); lfo.start();
   });
-  // crépitement : bruit filtré en impulsions
   const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const data = buf.getChannelData(0);
   for (let i = 0; i < data.length; i++) data[i] = Math.random() < 0.0009 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.02;
   const crackle = ctx.createBufferSource(); crackle.buffer = buf; crackle.loop = true;
@@ -964,7 +1109,7 @@ soundBtn.addEventListener('click', async () => {
   soundBtn.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
 });
 
-// sheet : questions, contrat
+// panneau : questions, contrat
 const sheet = document.getElementById('sheet'), sheetBody = document.getElementById('sheetBody');
 let lastFocus = null;
 function openSheet(pane) {
@@ -982,114 +1127,108 @@ document.getElementById('sheetClose').onclick = closeSheet;
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
 
 /* =========================================================
-   BOUCLE
+   MISE À JOUR DE LA SCÈNE pour une progression p
    ========================================================= */
 const clock = new THREE.Clock();
 const look = new THREE.Vector3();
-const heatCol = new THREE.Color(), cold = new THREE.Color('#c2300a'), white = new THREE.Color('#fff1c8');
-const hemiBase = new THREE.Color('#6a7c86'), hemiElys = new THREE.Color('#8fe8dc');
-let pS = scrollY / scrollMax();
-
-function render() {
-  const dt = Math.min(clock.getDelta(), 0.05);
-  const t = clock.elapsedTime;
-  if (!sheet.hidden) { requestAnimationFrame(render); return; } // la scène se met en pause sous le panneau
-  const pT = scrollY / scrollMax();
-  pS += (pT - pS) * (1 - Math.exp(-dt * (reduced ? 20 : 4.2)));
-  const p = clamp(pS);
-
-  // caméra
+const heatCol = new THREE.Color(), deepRed = new THREE.Color('#6a0e02'), orange = new THREE.Color('#e8400a'), whiteHot = new THREE.Color('#ffb070');
+function blackbody(h, out) { // métal : rouge sombre → orange → blanc chaud
+  return h < 0.75 ? out.copy(deepRed).lerp(orange, h / 0.75) : out.copy(orange).lerp(whiteHot, clamp((h - 0.75) / 0.9));
+}
+function applyScene(p, t, dt) {
   const ct = curveT(p);
   camCurve.getPoint(ct, camera.position);
   lookCurve.getPoint(ct, look);
-  if (!reduced) { camera.position.x += Math.sin(t * 0.37) * 0.06; camera.position.y += Math.sin(t * 0.51) * 0.05; }
+  if (!reduced) { camera.position.x += Math.sin(t * 0.37) * 0.05; camera.position.y += Math.sin(t * 0.51) * 0.04; }
   camera.lookAt(look);
   camera.fov = T.fov.at(p) + (mobile ? 12 : 0);
   camera.updateProjectionMatrix();
 
-  // atmosphère
   sky.position.copy(camera.position);
   const u = skyMat.uniforms;
   u.uTop.value.copy(T.skyTop.at(p)); u.uMid.value.copy(T.skyMid.at(p)); u.uBot.value.copy(T.skyBot.at(p)); u.uTime.value = t;
-  u.uStars.value = 1 - sm(0.88, 0.95, p);
+  u.uStars.value = 1 - sm(0.88, 0.95, p); u.uGlow.value = 1 - T.elys.at(p);
   scene.fog.color.copy(T.fog.at(p)); scene.fog.density = T.fogD.at(p);
+  renderer.toneMappingExposure = T.exposure.at(p);
   bloom.strength = T.bloom.at(p);
 
   const heat = T.heat.at(p), pyreAmt = T.pyre.at(p), open = T.open.at(p), unlock = T.unlock.at(p), elys = T.elys.at(p);
-  const flick = 0.85 + 0.15 * Math.sin(t * 11.3) * Math.sin(t * 7.1 + 1.3);
+  const flick = 0.82 + 0.1 * Math.sin(t * 11.3) + 0.08 * Math.sin(t * 23.7 + 1.3);
 
-  // sol
-  const gu = ground.material.uniforms;
-  gu.uTime.value = t; gu.uHeat.value = heat; gu.uPyre.value = pyreAmt; gu.uFog.value.copy(scene.fog.color); gu.uFogD.value = scene.fog.density; gu.uElys.value = elys;
+  pyreLight.intensity = 100 * Math.min(pyreAmt, 1.2) * flick;
+  pyreLight.position.x = PYRE.x + Math.sin(t * 7.1) * 0.15;
+  brazierLights.forEach((l, i) => { l.intensity = 40 * (0.85 + 0.15 * Math.sin(t * 9 + i * 2)) * (1 - elys * 0.3); });
+  elysLight.intensity = 220 * elys;
+  hemi.intensity = 0.12 + elys * 0.5; hemi.color.set(elys > 0.5 ? '#9fd8d0' : '#3a4a56');
 
-  // lumières
-  pyreLight.intensity = 110 * pyreAmt * flick;
-  brazierLights.forEach((l, i) => { l.intensity = 55 * (0.85 + 0.15 * Math.sin(t * 9 + i * 2)); });
-  elysLight.intensity = 140 * elys;
-  hemi.color.copy(hemiBase).lerp(hemiElys, elys * 0.6);
+  // métal qui chauffe, par le bas, irrégulièrement
+  blackbody(heat, heatCol);
+  lockMat.emissive.copy(heatCol); lockMat.emissiveIntensity = sm(0.5, 0.95, heat) * 0.55 * (0.92 + 0.08 * flick);
+  chainMat.emissive.copy(heatCol); chainMat.emissiveIntensity = sm(0.75, 0.95, heat) * 0.12;
+  lockMat.roughness = 1 - sm(0.8, 1.15, heat) * 0.3;
 
-  // métal qui chauffe : du rouge sombre au blanc
-  heatCol.copy(cold).lerp(white, sm(0.85, 1.15, heat));
-  const whiteHot = sm(0.85, 1.15, heat);
-  lockMat.emissive.copy(heatCol); lockMat.emissiveIntensity = 0.03 + heat * 0.14 + whiteHot * 0.55 * flick;
-  chainMat.emissive.copy(heatCol); chainMat.emissiveIntensity = 0.02 + heat * 0.09 + whiteHot * 0.3;
-  iron.emissiveIntensity = 0.02 + heat * 0.06;
-  keyMat.color.setRGB(2 + heat * 2, 0.8 + heat * 1.6, 0.3 + heat * 0.9);
-  lockHalo.material.color.copy(heatCol); lockHalo.material.opacity = 0.12 + heat * 0.22;
-
-  // le cadenas s'ouvre, tombe, les chaînes disparaissent, les portes s'ouvrent
-  shackle.position.y = unlock * 1.3;
+  // le cadenas s'ouvre, tombe ; les chaînes lâchent ; les vantaux s'ouvrent
+  shackle.position.y = unlock * 1.25;
   const fall = sm(0.87, 0.91, p);
-  padlock.position.set(LOCK_HOME.x, LOCK_HOME.y - fall * 9.4, LOCK_HOME.z + fall * 1.5);
-  padlock.rotation.z = fall * 0.5; padlock.rotation.x = fall * 1.2;
-  if (!reduced) padlock.rotation.y = Math.sin(t * 0.6) * 0.04 * (1 - fall);
+  padlock.position.set(LOCK_HOME.x, LOCK_HOME.y - fall * 8.6, LOCK_HOME.z + fall * 1.4);
+  padlock.rotation.set(fall * 1.35, reduced ? 0 : Math.sin(t * 0.5) * 0.03 * (1 - fall), fall * 0.4);
   chainMat.opacity = 1 - sm(0.865, 0.885, p); chain.visible = chainMat.opacity > 0.01;
-  const ang = open * 1.75;
+  const ang = open * 1.7;
   doors[0].rotation.y = ang; doors[1].rotation.y = -ang;
-  elysMat.uniforms.uOpen.value = open; elysMat.uniforms.uTime.value = t;
-  elysGlow.material.opacity = elys * 0.45;
+  elysMat.uniforms.uOpen.value = open; shaftMat.uniforms.uOpen.value = open; shaftMat.uniforms.uTime.value = t;
 
-  // feux
-  pyreFire.material.uniforms.uTime.value = t; pyreFire.material.uniforms.uAmt.value = pyreAmt;
-  brazierFires.forEach((f) => { f.material.uniforms.uTime.value = t; f.material.uniforms.uAmt.value = 1 - elys * 0.4; });
-  doorFire.material.uniforms.uTime.value = t; doorFire.material.uniforms.uAmt.value = clamp(heat * 0.9) * (1 - open);
-  embersBed.material.color.setRGB(0.9 * pyreAmt * flick, 0.22 * pyreAmt, 0.05);
+  pyreFlames.forEach((f) => { f.material.uniforms.uTime.value = t; f.material.uniforms.uAmt.value = Math.min(pyreAmt, 1.15); });
+  brazierFlames.flat().forEach((f) => { f.material.uniforms.uTime.value = t; f.material.uniforms.uAmt.value = 0.9; });
+  charMat.emissiveIntensity = (1.1 + pyreAmt * 0.6) * flick;
+  smokeMat.uniforms.uTime.value = t; smokeMat.uniforms.uAmt.value = 1 - elys;
+  sparks.material.uniforms.uTime.value = t; sparks.material.uniforms.uOpacity.value = T.embers.at(p) * pyreAmt;
+  dust.material.uniforms.uTime.value = t; dust.material.uniforms.uOpacity.value = elys;
 
-  smoke.forEach((s, i) => {
-    const k = (t * 0.06 + s.userData.phase) % 1;
-    s.position.set(PYRE.x + s.userData.x + Math.sin(t * 0.3 + i) * k * 3, 8 + k * 26, PYRE.z - k * 4);
-    s.scale.setScalar(5 + k * 16); s.material.rotation += s.userData.spin * dt;
-    s.material.opacity = Math.sin(k * Math.PI) * 0.55 * (1 - elys);
-  });
-
-  embers.material.uniforms.uTime.value = t; embers.material.uniforms.uOpacity.value = T.embers.at(p);
-  motes.material.uniforms.uTime.value = t; motes.material.uniforms.uOpacity.value = elys;
-
-  // pièces : elles tombent en spirale et fondent dans le bûcher
   const coinAmt = T.coins.at(p);
   coins.visible = coinAmt > 0.001;
   if (coins.visible) {
     for (let i = 0; i < COINS; i++) {
-      const ph = i / COINS;
-      const k = (t * 0.32 + ph) % 1;
-      const r = (1 - k) * 3.2 + 0.4, a = ph * 6.283 + k * 4;
-      coinDummy.position.set(PYRE.x + Math.cos(a) * r, 22 - k * k * 20, PYRE.z + Math.sin(a) * r);
-      coinDummy.rotation.set(t * 2 + i, t * 1.3 + ph * 4, 0);
-      coinDummy.scale.setScalar(coinAmt * (k < 0.9 ? 1 : (1 - k) / 0.1) + 1e-4);
+      const ph = i / COINS; const k = (t * 0.3 + ph) % 1;
+      const r = (1 - k) * 3 + 0.3, a = ph * 6.283 + k * 3.5;
+      coinDummy.position.set(PYRE.x + Math.cos(a) * r, 21 - k * k * 17.5, PYRE.z + Math.sin(a) * r);
+      coinDummy.rotation.set(t * 2.2 + i, t * 1.4 + ph * 4, 0.3);
+      coinDummy.scale.setScalar(coinAmt * (k < 0.92 ? 1 : (1 - k) / 0.08) + 1e-4);
       coinDummy.updateMatrix(); coins.setMatrixAt(i, coinDummy.matrix);
     }
     coins.instanceMatrix.needsUpdate = true;
   }
+  return heat;
+}
 
-  // flash turquoise au passage de la porte
-  flash.style.opacity = (sm(0.905, 0.93, p) * (1 - sm(0.93, 0.965, p)) * 0.8).toFixed(3);
+/* ---------- cartes des rituels : de vrais rendus de la scène ---------- */
+function snapshot(pose, p, w = 560, h = 385) {
+  applyScene(p, 4.2, 0);
+  camera.position.set(...pose.pos); camera.lookAt(...pose.look); camera.fov = pose.fov; camera.updateProjectionMatrix();
+  renderer.toneMappingExposure = pose.exposure || 1.7;
+  composer.render();
+  const src = renderer.domElement, c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ar = w / h, sw = Math.min(src.width, src.height * ar), sh = sw / ar;
+  c.getContext('2d').drawImage(src, (src.width - sw) / 2, (src.height - sh) / 2, sw, sh, 0, 0, w, h);
+  return c.toDataURL('image/webp', 0.86);
+}
 
-  // DOM
+/* =========================================================
+   BOUCLE
+   ========================================================= */
+let pS = scrollY / scrollMax();
+function render() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  if (!sheet.hidden) { requestAnimationFrame(render); return; }
+  const pT = scrollY / scrollMax();
+  pS += (pT - pS) * (1 - Math.exp(-dt * (reduced ? 20 : 4.2)));
+  const p = clamp(pS);
+  const heat = applyScene(p, t, dt);
+  flash.style.opacity = (sm(0.905, 0.93, p) * (1 - sm(0.93, 0.965, p)) * 0.7).toFixed(3);
   updatePanels(p);
   railFill.style.height = `${(p * 100).toFixed(2)}%`;
   railFill.style.background = p > 0.9 ? 'var(--elys)' : '';
   if (audio) audio.setP(p, heat);
-
   composer.render();
   requestAnimationFrame(render);
 }
@@ -1097,13 +1236,26 @@ function render() {
 addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  const s = pointScale(); for (const m of [embers, motes, pyreFire, doorFire, ...brazierFires]) m.material.uniforms.uScale.value = s;
+  const s = innerHeight * renderer.getPixelRatio() * 0.5; for (const m of [sparks, dust]) m.material.uniforms.uScale.value = s;
 });
 
-// compile les shaders avant de lever le rideau
+// compile, rend les cartes, puis lève le rideau
 renderer.compile(scene, camera);
-setBoot(0.9);
-await frame();
+setBoot(0.82); await frame();
+const shots = {
+  lock: snapshot({ pos: [5, 12, -41], look: [0, 9.8, -58.3], fov: 30, exposure: 2.4 }, 0.18),
+  seal: snapshot({ pos: [-6, 11.5, -43], look: [0, 9.8, -58.3], fov: 28, exposure: 1.05 }, 0.3),
+  burn: snapshot({ pos: [10, 9, -20], look: [0, 6.5, -36], fov: 36, exposure: 1.2 }, 0.69),
+};
+const ritualCards = document.getElementById('ritualCards');
+CONFIG.rituals.forEach((r) => {
+  const el = document.createElement('a'); el.className = 'card'; el.href = `app.html#${r.mode}`; el.style.setProperty('--c', r.color);
+  el.innerHTML = `<img src="${shots[r.shot]}" alt="" />
+    <header><h3>${r.name}</h3><small>${r.tag}</small></header>
+    <dl><dt>Opens</dt><dd>${r.opens}</dd><dt>Withdrawable</dt><dd>${r.back}</dd><dt>Fee</dt><dd>0.1 HYPE</dd></dl>`;
+  ritualCards.append(el);
+});
+setBoot(0.92); await frame();
 if (location.hash === '#enter') scrollTo({ top: scrollMax() });
 pS = scrollY / scrollMax();
 render();
