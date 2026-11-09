@@ -941,64 +941,97 @@ for (let i = 0; i < 7; i++) {
   lathe([[0, 0], [1.0, 0.1], [1.7, 0.6], [1.9, 1.1], [1.75, 1.05], [1.5, 0.7], [0, 0.4]], bowlMat, s * 13, 5, -51, 32);
 });
 
-/* ---------- feu : flammes en shader (bruit qui monte, rampe de température) ---------- */
+/* ---------- feu, étincelles et fumée : de vraies photos, animées par déformation ---------- */
+const texLoader = new THREE.TextureLoader();
+const loadTex = async (url, srgb = true) => { const t = await texLoader.loadAsync(url); if (srgb) t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.anisotropy = 4; return t; };
+const [FIRE_PYRE, FIRE_BRAZIER, SPARKS, SMOKE_IMG, SKY_IMG] = await Promise.all([
+  loadTex('assets/scene/fire-pyre.jpg'), loadTex('assets/scene/fire-brazier.jpg'), loadTex('assets/scene/sparks.jpg'),
+  loadTex('assets/scene/smoke.jpg'), loadTex('assets/scene/sky.jpg'),
+]);
+const noiseGLSL = `
+  float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
+    return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
+  float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * n(p); p = p * 2.07 + 3.1; a *= .5; } return s; }`;
 const flameVert = `uniform vec3 uCenter; uniform vec2 uSize; varying vec2 vUv;
   void main(){ vUv = uv; vec3 right = normalize(vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]));
     vec3 p = uCenter + right * position.x * uSize.x + vec3(0., 1., 0.) * position.y * uSize.y;
     gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.); }`;
-const flameFrag = `uniform float uTime, uSeed, uAmt, uBright; varying vec2 vUv;
-  float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
-    return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
-  float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * n(p); p = p * 2.07 + 3.1; a *= .5; } return s; }
-  void main(){
-    vec2 uv = vUv; float t = uTime * 1.35 + uSeed * 17.;
-    float q = fbm(vec2(uv.x * 3. + uSeed, uv.y * 2.2 - t));
-    float r = fbm(vec2(uv.x * 7. - uSeed, uv.y * 5.5 - t * 1.8) + q);
-    float x = uv.x - .5 + (q - .5) * .32 * uv.y;
-    float width = mix(.46, .07, pow(uv.y, .7)) * (.8 + .2 * uAmt);
-    float shape = smoothstep(width, width * .2, abs(x));
-    float body = shape * (.3 + r * 1.05) * smoothstep(0., .07, uv.y) - uv.y * (.95 - .2 * uAmt);
-    float temp = clamp(body * 1.45, 0., 1.);
-    vec3 col = mix(vec3(.45, .05, .0), vec3(1., .3, .04), smoothstep(.0, .35, temp));
-    col = mix(col, vec3(1., .66, .25), smoothstep(.35, .7, temp));
-    col = mix(col, vec3(1., .88, .62), smoothstep(.82, 1., temp));
-    float a = smoothstep(.0, .3, body);
-    gl_FragColor = vec4(col * (.75 + temp * 1.15) * a * uBright, 1.); }`;
 const flameGeo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
-function makeFlames(at, w, h, count, bright = 1) {
-  return Array.from({ length: count }, (_, i) => {
-    const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-      uniforms: { uTime: { value: 0 }, uSeed: { value: i * 1.37 + at.x * 0.1 }, uAmt: { value: 1 }, uBright: { value: bright },
-        uCenter: { value: at.clone().add(new THREE.Vector3((i - (count - 1) / 2) * w * 0.12, 0, ((i % 2) - 0.5) * w * 0.12)) },
-        uSize: { value: new THREE.Vector2(w * (1 - i * 0.08), h * (1 - (i % 3) * 0.1)) } },
-      vertexShader: flameVert, fragmentShader: flameFrag });
-    const m = new THREE.Mesh(flameGeo, mat); m.frustumCulled = false; scene.add(m); return m;
-  });
+// la photo, déformée par un bruit qui monte ; une seconde lecture en miroir et décalée évite toute boucle visible
+const photoFireFrag = `uniform sampler2D uMap; uniform float uTime, uSeed, uAmt, uBright; varying vec2 vUv;
+  ${noiseGLSL}
+  void main(){
+    vec2 uv = vUv; float t = uTime * .9 + uSeed * 7.;
+    float k = .25 + uv.y;
+    vec2 d1 = vec2(fbm(vec2(uv.x * 4., uv.y * 3. - t * 1.7)), fbm(vec2(uv.x * 3. + 7., uv.y * 2.6 - t * 1.3))) - .5;
+    vec2 d2 = vec2(fbm(vec2(uv.x * 3.5 + 3., uv.y * 2.8 - t * 1.5 + 9.)), fbm(vec2(uv.x * 4.2 + 1., uv.y * 3.2 - t * 1.9))) - .5;
+    vec2 u1 = uv + d1 * vec2(.11, .07) * k, u2 = vec2(1. - uv.x, uv.y * .97 + .01) + d2 * vec2(.11, .07) * k;
+    vec3 a = texture2D(uMap, u1).rgb * step(0., u1.y) * step(u1.y, 1.);
+    vec3 b = texture2D(uMap, u2).rgb * step(0., u2.y) * step(u2.y, 1.);
+    float m = .5 + .5 * sin(t * .55 + uSeed);
+    vec3 c = mix(a, b, .3 + .4 * m);
+    float flick = .82 + .18 * fbm(vec2(t * 2.3, uSeed * 5.));
+    gl_FragColor = vec4(c * flick * uBright * (.75 + .25 * uAmt), 1.); }`;
+function photoFire(map, at, height, bright, seed) {
+  const aspect = map.image.width / map.image.height;
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    uniforms: { uMap: { value: map }, uTime: { value: 0 }, uSeed: { value: seed }, uAmt: { value: 1 }, uBright: { value: bright },
+      uCenter: { value: at.clone() }, uSize: { value: new THREE.Vector2(height * aspect, height) } },
+    vertexShader: flameVert, fragmentShader: photoFireFrag });
+  const m = new THREE.Mesh(flameGeo, mat); m.frustumCulled = false; m.renderOrder = 2; scene.add(m); return m;
 }
-const pyreFlames = makeFlames(new THREE.Vector3(PYRE.x, 3.0, PYRE.z), 6.4, 9, 4, 0.5);
-const brazierFlames = [-1, 1].map((s) => makeFlames(new THREE.Vector3(s * 13, 5.8, -51), 3.0, 4.2, 3, 0.7));
+const pyreFlames = [
+  photoFire(FIRE_PYRE, new THREE.Vector3(PYRE.x, 3.1, PYRE.z), 11.5, 1.25, 0.3),
+  photoFire(FIRE_PYRE, new THREE.Vector3(PYRE.x + 0.4, 3.0, PYRE.z - 0.5), 8.5, 0.55, 2.1),
+];
+const brazierFlames = [-1, 1].map((s, i) => [photoFire(FIRE_BRAZIER, new THREE.Vector3(s * 13, 5.55, -51), 4.4, 1.1, 4 + i)]);
 const allFlames = [...pyreFlames, ...brazierFlames.flat()];
 
-// fumée : volutes sombres éclairées par en dessous
-const smokeMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
-  uniforms: { uTime: { value: 0 }, uAmt: { value: 1 }, uCenter: { value: new THREE.Vector3(PYRE.x, 9, PYRE.z) }, uSize: { value: new THREE.Vector2(16, 34) } },
+// gerbe d'étincelles : deux lectures de la photo qui montent et se relaient en fondu
+const sparkMat = new THREE.ShaderMaterial({ // (sparks: masked outside the photo, soft edges)
+ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uMap: { value: SPARKS }, uTime: { value: 0 }, uAmt: { value: 1 },
+    uCenter: { value: new THREE.Vector3(PYRE.x, 8.5, PYRE.z) }, uSize: { value: new THREE.Vector2(10 * SPARKS.image.width / SPARKS.image.height, 10) } },
   vertexShader: flameVert,
-  fragmentShader: `uniform float uTime, uAmt; varying vec2 vUv;
-    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.-2.*f);
-      return mix(mix(h(i), h(i+vec2(1,0)), u.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), u.x), u.y); }
-    float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++){ s += a * n(p); p = p * 2.03 + 1.9; a *= .5; } return s; }
-    void main(){ vec2 uv = vUv; float t = uTime * .12;
-      float q = fbm(vec2(uv.x * 2.5, uv.y * 1.6 - t));
-      float d = fbm(vec2(uv.x * 4. + q, uv.y * 3. - t * 1.4));
-      float spread = mix(.12, .5, uv.y);
-      float mask = smoothstep(spread, spread * .3, abs(uv.x - .5 + (q - .5) * .3)) * smoothstep(0., .15, uv.y) * smoothstep(1., .55, uv.y);
-      float a = smoothstep(.42, .78, d) * mask * .55 * uAmt;
-      vec3 c = mix(vec3(.32, .14, .06), vec3(.06, .05, .05), smoothstep(.05, .4, uv.y));
-      gl_FragColor = vec4(c, a); }`,
-});
-const smoke = new THREE.Mesh(flameGeo, smokeMat); smoke.frustumCulled = false; scene.add(smoke);
+  fragmentShader: `uniform sampler2D uMap; uniform float uTime, uAmt; varying vec2 vUv;
+    void main(){ vec3 c = vec3(0.);
+      for (int i = 0; i < 2; i++) { float ph = fract(uTime * .16 + float(i) * .5);
+        vec2 uv = vec2(i == 0 ? vUv.x : 1. - vUv.x, vUv.y - ph * .45);
+        float inside = step(0., uv.y) * step(uv.y, 1.);
+        c += texture2D(uMap, uv).rgb * inside * smoothstep(0., .35, uv.y) * smoothstep(1., .75, uv.y) * sin(ph * 3.14159); }
+      gl_FragColor = vec4(c * .75 * uAmt, 1.); }` });
+const sparkSheet = new THREE.Mesh(flameGeo, sparkMat); sparkSheet.frustumCulled = false; sparkSheet.renderOrder = 3; scene.add(sparkSheet);
+
+// fumée : la photo sert de densité (le noir devient transparent), lente montée et ondulation
+const smokeMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
+  uniforms: { uMap: { value: SMOKE_IMG }, uTime: { value: 0 }, uAmt: { value: 1 },
+    uCenter: { value: new THREE.Vector3(PYRE.x, 10.5, PYRE.z - 1) }, uSize: { value: new THREE.Vector2(26 * SMOKE_IMG.image.width / SMOKE_IMG.image.height, 26) } },
+  vertexShader: flameVert,
+  fragmentShader: `uniform sampler2D uMap; uniform float uTime, uAmt; varying vec2 vUv;
+    ${noiseGLSL}
+    void main(){ vec4 acc = vec4(0.);
+      for (int i = 0; i < 2; i++) { float ph = fract(uTime * .035 + float(i) * .5);
+        vec2 d = vec2(fbm(vec2(vUv.x * 2.5 + float(i) * 4., vUv.y * 2. - uTime * .12)), fbm(vec2(vUv.x * 2. + 9., vUv.y * 1.8 - uTime * .1))) - .5;
+        vec2 uv = vec2(i == 0 ? vUv.x : 1. - vUv.x, (vUv.y - ph * .3) / (1. + ph * .15)) + d * .08;
+        float inside = step(0., uv.y) * step(uv.y, 1.) * step(0., uv.x) * step(uv.x, 1.);
+        vec3 s = texture2D(uMap, uv).rgb * inside * smoothstep(0., .12, uv.y); float w = sin(ph * 3.14159);
+        acc += vec4(s, max(s.r, max(s.g, s.b))) * w; }
+      float a = clamp(acc.a * 1.25, 0., 1.) * .8 * uAmt;
+      gl_FragColor = vec4(acc.rgb / max(acc.a, .001) * .75, a); }` });
+const smoke = new THREE.Mesh(flameGeo, smokeMat); smoke.frustumCulled = false; smoke.renderOrder = 1; scene.add(smoke);
+
+// toile de fond : le ciel d'orage et la forteresse au loin, fondus dans la brume
+const backdropMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
+  uniforms: { uMap: { value: SKY_IMG }, uFog: { value: new THREE.Color() }, uFade: { value: 1 }, uMix: { value: 0.25 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }`,
+  fragmentShader: `uniform sampler2D uMap; uniform vec3 uFog; uniform float uFade, uMix; varying vec2 vUv;
+    void main(){ vec3 c = texture2D(uMap, vUv).rgb; c = mix(c, uFog, uMix + (1. - smoothstep(.0, .45, vUv.y)) * .35);
+      float edge = smoothstep(0., .08, vUv.x) * smoothstep(1., .92, vUv.x) * smoothstep(1., .86, vUv.y);
+      gl_FragColor = vec4(c, edge * uFade); }` });
+const BACK_W = 1250, BACK_H = BACK_W * SKY_IMG.image.height / SKY_IMG.image.width;
+const backdrop = new THREE.Mesh(new THREE.PlaneGeometry(BACK_W, BACK_H), backdropMat);
+backdrop.position.set(0, 6 + (0.5 - 0.36) * BACK_H, -460); scene.add(backdrop);
 
 // étincelles : rares, petites, qui montent vite
 function makeSparks({ count, min, max, size, rise }) {
@@ -1194,7 +1227,9 @@ function applyScene(p, t, dt) {
   brazierFlames.flat().forEach((f) => { f.material.uniforms.uTime.value = t; f.material.uniforms.uAmt.value = 0.9; });
   charMat.emissiveIntensity = (1.1 + pyreAmt * 0.6) * flick;
   smokeMat.uniforms.uTime.value = t; smokeMat.uniforms.uAmt.value = 1 - elys;
-  sparks.material.uniforms.uTime.value = t; sparks.material.uniforms.uOpacity.value = T.embers.at(p) * pyreAmt;
+  sparkMat.uniforms.uTime.value = t; sparkMat.uniforms.uAmt.value = T.embers.at(p) * Math.min(pyreAmt, 1.2);
+  backdropMat.uniforms.uFog.value.copy(scene.fog.color); backdropMat.uniforms.uFade.value = 1 - sm(0.86, 0.95, p);
+  sparks.material.uniforms.uTime.value = t; sparks.material.uniforms.uOpacity.value = T.embers.at(p) * pyreAmt * 0.5;
   dust.material.uniforms.uTime.value = t; dust.material.uniforms.uOpacity.value = elys;
 
   const coinAmt = T.coins.at(p);
