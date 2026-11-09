@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Verrouiller ou brûler · Elysian Pyre</title>
-<meta name="description" content="Verrouillez des tokens ERC-20 sur Elysium jusqu'à une date ou pour toujours, brûlez-les, et gérez vos locks.">
+<title>Lock or burn · Elysian Pyre</title>
+<meta name="description" content="Lock ERC-20 tokens on Elysium until a date or forever, burn them, and manage your locks.">
 <meta name="theme-color" content="#07050a">
 <link rel="icon" href="assets/brand/mark.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,15 +18,15 @@
 <div class="film film-noise" aria-hidden="true"></div>
 
 <header class="top">
-  <a class="skip" href="#act">Aller au formulaire</a>
-  <a class="brand" href="index.html" aria-label="Elysian Pyre, accueil">
+  <a class="skip" href="#act">Skip to the form</a>
+  <a class="brand" href="index.html" aria-label="Elysian Pyre, home">
     <svg class="brand-lock" viewBox="0 0 22 26" aria-hidden="true"><path d="M5 11V7.5a6 6 0 0 1 12 0V11" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="1.5" y="11" width="19" height="13.5" rx="3" fill="currentColor"/><circle cx="11" cy="16.5" r="2" fill="#07050a"/><path d="M11 17.5v3.5" stroke="#07050a" stroke-width="1.8"/></svg>
     <b>ELYSIAN <em>PYRE</em></b>
   </a>
   <nav class="glass nav" aria-label="Pages">
-    <a href="index.html">Accueil</a>
+    <a href="index.html">Home</a>
     <a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">Code</a>
-    <button class="btn btn--primary" type="button" data-connect>Connecter le wallet</button>
+    <button class="btn btn--primary" type="button" data-connect>Connect wallet</button>
   </nav>
 </header>
 
@@ -35,15 +35,15 @@
   <div class="app-grid">
     <section class="pane pane--act" id="act" aria-labelledby="act-h">
       <div class="pane__head">
-        <span class="eyebrow">Elysium · chaîne 99901</span>
-        <h1 id="act-h">Verrouiller ou brûler</h1>
-        <p class="status" data-status><span class="dot"></span><span data-status-text>Aucun wallet connecté</span></p>
+        <span class="eyebrow">Elysium · chain 99901</span>
+        <h1 id="act-h">Lock or burn</h1>
+        <p class="status" data-status><span class="dot"></span><span data-status-text>No wallet connected</span></p>
       </div>
 
       <div class="seg" role="group" aria-label="Action">
-        <button type="button" id="tab-lock" aria-pressed="true" data-mode="lock">Verrouiller</button>
-        <button type="button" id="tab-forever" aria-pressed="false" data-mode="forever">Sceller</button>
-        <button type="button" id="tab-burn" aria-pressed="false" data-mode="burn">Brûler</button>
+        <button type="button" id="tab-lock" aria-pressed="true" data-mode="lock">Lock</button>
+        <button type="button" id="tab-forever" aria-pressed="false" data-mode="forever">Seal</button>
+        <button type="button" id="tab-burn" aria-pressed="false" data-mode="burn">Burn</button>
       </div>
       <p class="mode-line" data-mode-line></p>
 
@@ -51,38 +51,38 @@
         <div class="field">
           <label for="token">Token</label>
           <select id="token" name="token" data-token-select></select>
-          <input id="token-custom" name="tokenCustom" type="text" autocomplete="off" spellcheck="false" placeholder="0x… adresse du token" data-token-custom hidden aria-label="Adresse du token">
+          <input id="token-custom" name="tokenCustom" type="text" autocomplete="off" spellcheck="false" placeholder="0x… token address" data-token-custom hidden aria-label="Token address">
           <p class="hint" data-token-info></p>
         </div>
 
         <div class="field">
-          <div class="field__row"><label for="amount">Montant</label><button type="button" class="link-btn" data-max>Solde : <span data-balance>–</span></button></div>
-          <input id="amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0,0" data-amount>
+          <div class="field__row"><label for="amount">Amount</label><button type="button" class="link-btn" data-max>Balance: <span data-balance>–</span></button></div>
+          <input id="amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.0" data-amount>
         </div>
 
         <div class="field" data-only="lock">
-          <label for="unlock">Date de déblocage</label>
+          <label for="unlock">Unlock date</label>
           <input id="unlock" name="unlock" type="datetime-local" data-unlock>
-          <div class="chips" aria-label="Dates rapides">
-            <button type="button" data-plus="30">30 jours</button>
-            <button type="button" data-plus="90">90 jours</button>
-            <button type="button" data-plus="180">6 mois</button>
-            <button type="button" data-plus="365">1 an</button>
+          <div class="chips" aria-label="Quick dates">
+            <button type="button" data-plus="30">30 days</button>
+            <button type="button" data-plus="90">90 days</button>
+            <button type="button" data-plus="180">6 months</button>
+            <button type="button" data-plus="365">1 year</button>
           </div>
         </div>
 
         <div class="field" data-only="lock forever">
-          <label class="check"><input type="checkbox" data-other-owner> Verrouiller pour un autre wallet</label>
-          <input id="owner" name="owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… adresse du propriétaire" data-owner hidden aria-label="Adresse du propriétaire" aria-describedby="owner-hint">
-          <p class="hint" id="owner-hint" data-owner-hint hidden>Ce wallet, et non le vôtre, sera le seul à pouvoir retirer ou prolonger ce lock.</p>
+          <label class="check"><input type="checkbox" data-other-owner> Lock for another wallet</label>
+          <input id="owner" name="owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… owner address" data-owner hidden aria-label="Owner address" aria-describedby="owner-hint">
+          <p class="hint" id="owner-hint" data-owner-hint hidden>That wallet, not yours, will be the only one able to withdraw or extend this lock.</p>
         </div>
 
         <dl class="summary" data-summary>
-          <div><dt>Montant</dt><dd data-sum-amt>Saisissez un montant</dd></div>
-          <div><dt>Frais</dt><dd data-fee>0,1 HYPE</dd></div>
-          <div data-only="lock"><dt>S'ouvre</dt><dd data-sum-date>Choisissez une date</dd></div>
-          <div data-only="forever"><dt>S'ouvre</dt><dd>Jamais</dd></div>
-          <div data-only="burn"><dt>Résultat</dt><dd>Détruits pour de bon</dd></div>
+          <div><dt>Amount</dt><dd data-sum-amt>Enter an amount</dd></div>
+          <div><dt>Fee</dt><dd data-fee>0.1 HYPE</dd></div>
+          <div data-only="lock"><dt>Opens</dt><dd data-sum-date>Pick a date</dd></div>
+          <div data-only="forever"><dt>Opens</dt><dd>Never</dd></div>
+          <div data-only="burn"><dt>Result</dt><dd>Destroyed for good</dd></div>
         </dl>
 
         <label class="check check--warn" data-only="forever burn">
@@ -90,19 +90,19 @@
           <span data-confirm-text></span>
         </label>
 
-        <button class="btn btn--primary btn--block" type="submit" data-submit>Connecter le wallet</button>
+        <button class="btn btn--primary btn--block" type="submit" data-submit>Connect wallet</button>
         <p class="msg" data-msg role="status" aria-live="polite"></p>
-        <p class="hint">Les dates sont dans votre fuseau horaire, <span data-tz></span>.</p>
+        <p class="hint">Dates are in your time zone, <span data-tz></span>.</p>
       </form>
     </section>
 
     <section class="pane pane--list" id="mine" aria-labelledby="mine-h">
       <div class="pane__head pane__head--row">
-        <h2 id="mine-h">Mes locks</h2>
-        <button type="button" class="link-btn" data-refresh>Actualiser</button>
+        <h2 id="mine-h">My locks</h2>
+        <button type="button" class="link-btn" data-refresh>Refresh</button>
       </div>
       <div class="list" data-list>
-        <p class="empty">Connectez un wallet pour voir vos locks.</p>
+        <p class="empty">Connect a wallet to see your locks.</p>
       </div>
     </section>
   </div>
@@ -119,23 +119,23 @@
       <span class="chip" data-r-chip></span>
     </div>
     <div class="lockrow__acts" data-r-acts>
-      <button type="button" class="btn btn--primary btn--sm" data-act="withdraw">Retirer</button>
-      <button type="button" class="btn btn--secondary btn--sm" data-act="extend">Prolonger</button>
-      <button type="button" class="btn btn--secondary btn--sm" data-act="transfer">Transférer</button>
+      <button type="button" class="btn btn--primary btn--sm" data-act="withdraw">Withdraw</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-act="extend">Extend</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-act="transfer">Transfer</button>
     </div>
     <form class="lockrow__edit" data-r-edit hidden novalidate>
       <label class="sr" data-r-edit-label></label>
       <input type="text" data-r-input>
-      <button type="submit" class="btn btn--primary btn--sm" data-r-ok>Confirmer</button>
-      <button type="button" class="btn btn--secondary btn--sm" data-r-cancel>Annuler</button>
+      <button type="submit" class="btn btn--primary btn--sm" data-r-ok>Confirm</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-r-cancel>Cancel</button>
     </form>
   </article>
 </template>
 
 <footer class="app-foot">
   <span>&copy; 2026 Elysian Pyre</span>
-  <span data-contract-line>Contrat pas encore déployé</span>
-  <a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">Code source</a>
+  <span data-contract-line>Contract not deployed yet</span>
+  <a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">Source code</a>
 </footer>
 <script type="module" src="assets/app/app.js"></script>
 </body>
