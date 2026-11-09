@@ -6,14 +6,16 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title TokenLocker
-/// @notice Locks ERC-20 tokens until a fixed date. After that date the lock owner withdraws everything at once.
+/// @title Elysian Pyre
+/// @notice Lock ERC-20 tokens until a date (or forever), and burn tokens for good, on Elysium.
 /// @dev Design guarantees:
-///      - The admin (contract owner) can only change the creation fee (capped by MAX_FEE) and the fee recipient.
+///      - The admin (contract owner) can only change the fee (capped by MAX_FEE) and the fee recipient.
 ///        It has no function that touches locked tokens, and there is no pause.
-///      - A lock can never be shortened or canceled. It can only be extended by its owner.
-///      - Fee-on-transfer tokens are rejected at creation. Rebasing tokens are not supported.
-contract TokenLocker is Ownable2Step, ReentrancyGuard {
+///      - A lock can never be shortened or canceled. Its owner can only extend it, possibly to forever.
+///      - The contract never keeps burned tokens: they are destroyed through the token's own burn(),
+///        or sent to the dead address when the token has no working burn().
+///      - Fee-on-transfer tokens are rejected for locks. Rebasing tokens are not supported.
+contract ElysianPyre is Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct Lock {
@@ -24,15 +26,22 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         uint256 amount;
     }
 
-    /// @notice Hard cap on the creation fee, in native currency (HYPE on Elysium). Cannot be changed.
+    /// @notice Hard cap on the fee, in native currency (HYPE on Elysium). Cannot be changed.
     uint256 public constant MAX_FEE = 1 ether;
-    /// @notice Longest allowed lock, to catch obvious mistakes (e.g. a timestamp in milliseconds).
+    /// @notice Longest allowed timed lock, to catch obvious mistakes (e.g. a timestamp in milliseconds).
     uint256 public constant MAX_LOCK_DURATION = 100 * 365 days;
+    /// @notice Unlock time that marks a permanent lock. It never unlocks.
+    uint40 public constant PERMANENT = type(uint40).max;
+    /// @notice Where tokens go when they cannot be burned through the token's own burn().
+    address public constant DEAD = 0x000000000000000000000000000000000000dEaD;
 
-    /// @notice Native-currency fee charged per lock creation.
+    /// @notice Native-currency fee charged per lock creation and per burn.
     uint256 public fee;
     /// @notice Address that receives the collected fees.
     address public feeRecipient;
+
+    /// @notice Total amount of each token burned through this contract.
+    mapping(address token => uint256 amount) public totalBurned;
 
     Lock[] private _locks;
     mapping(address user => uint256[] ids) private _userLockIds;
@@ -49,6 +58,9 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
     event Withdrawn(uint256 indexed id, address indexed owner, uint256 amount);
     event LockExtended(uint256 indexed id, uint40 oldUnlockTime, uint40 newUnlockTime);
     event LockTransferred(uint256 indexed id, address indexed from, address indexed to);
+    /// @param supplyReduced True when the token's own burn() destroyed the tokens (totalSupply went down),
+    ///        false when they were sent to the dead address.
+    event Burned(address indexed token, address indexed burner, uint256 amount, bool supplyReduced);
     event FeeUpdated(uint256 oldFee, uint256 newFee);
     event FeeRecipientUpdated(address oldRecipient, address newRecipient);
     event FeesWithdrawn(address indexed recipient, uint256 amount);
@@ -76,10 +88,11 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
     }
 
     // ---------------------------------------------------------------------
-    // Lock lifecycle
+    // Locks
     // ---------------------------------------------------------------------
 
     /// @notice Locks `amount` of `token` until `unlockTime`, owned by `lockOwner`.
+    ///         Pass `PERMANENT` as `unlockTime` to lock forever.
     /// @dev The caller must approve this contract for `amount` beforehand and send exactly `fee` in native currency.
     function lock(address token, uint256 amount, uint40 unlockTime, address lockOwner)
         external
@@ -87,24 +100,18 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         nonReentrant
         returns (uint256 id)
     {
-        if (msg.value != fee) revert WrongFee(fee, msg.value);
-        if (token == address(0) || lockOwner == address(0)) revert ZeroAddress();
-        if (amount == 0) revert ZeroAmount();
         _checkUnlockTime(unlockTime);
+        return _lock(token, amount, unlockTime, lockOwner);
+    }
 
-        IERC20 t = IERC20(token);
-        uint256 balanceBefore = t.balanceOf(address(this));
-        t.safeTransferFrom(msg.sender, address(this), amount);
-        if (t.balanceOf(address(this)) - balanceBefore != amount) revert UnsupportedToken();
-
-        id = _locks.length;
-        _locks.push(
-            Lock({token: token, unlockTime: unlockTime, withdrawn: false, owner: lockOwner, amount: amount})
-        );
-        _userLockIds[lockOwner].push(id);
-        _tokenLockIds[token].push(id);
-
-        emit Locked(id, token, lockOwner, msg.sender, amount, unlockTime);
+    /// @notice Locks `amount` of `token` forever. Nobody can ever withdraw it.
+    function lockPermanent(address token, uint256 amount, address lockOwner)
+        external
+        payable
+        nonReentrant
+        returns (uint256 id)
+    {
+        return _lock(token, amount, PERMANENT, lockOwner);
     }
 
     /// @notice Withdraws all tokens of lock `id` to its owner, once the unlock time has passed.
@@ -112,7 +119,7 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         Lock storage l = _getLock(id);
         if (msg.sender != l.owner) revert NotLockOwner();
         if (l.withdrawn) revert AlreadyWithdrawn();
-        if (block.timestamp < l.unlockTime) revert StillLocked(l.unlockTime);
+        if (l.unlockTime == PERMANENT || block.timestamp < l.unlockTime) revert StillLocked(l.unlockTime);
 
         l.withdrawn = true;
         uint256 amount = l.amount;
@@ -121,7 +128,8 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         emit Withdrawn(id, msg.sender, amount);
     }
 
-    /// @notice Pushes the unlock time of lock `id` further into the future. It can never be brought forward.
+    /// @notice Pushes the unlock time of lock `id` further into the future, or to `PERMANENT`.
+    ///         It can never be brought forward.
     function extendLock(uint256 id, uint40 newUnlockTime) external {
         Lock storage l = _getLock(id);
         if (msg.sender != l.owner) revert NotLockOwner();
@@ -144,6 +152,47 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         l.owner = to;
         _userLockIds[to].push(id);
         emit LockTransferred(id, msg.sender, to);
+    }
+
+    // ---------------------------------------------------------------------
+    // Burn
+    // ---------------------------------------------------------------------
+
+    /// @notice Burns `amount` of `token` from the caller, for good.
+    /// @dev Tries the token's own `burn(uint256)` first, which lowers its totalSupply. If the token has no
+    ///      working burn(), the tokens are sent to the dead address instead. Either way the contract keeps nothing.
+    /// @return burned Amount actually received and burned (lower than `amount` for fee-on-transfer tokens).
+    /// @return supplyReduced True if totalSupply went down, false if the tokens went to the dead address.
+    function burn(address token, uint256 amount)
+        external
+        payable
+        nonReentrant
+        returns (uint256 burned, bool supplyReduced)
+    {
+        if (msg.value != fee) revert WrongFee(fee, msg.value);
+        if (token == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+
+        IERC20 t = IERC20(token);
+        burned = _pull(t, amount);
+        if (burned == 0) revert UnsupportedToken();
+
+        uint256 balanceBefore = t.balanceOf(address(this));
+        (bool ok,) = token.call(abi.encodeWithSignature("burn(uint256)", burned));
+        uint256 balanceAfter = t.balanceOf(address(this));
+
+        if (ok && balanceAfter + burned == balanceBefore) {
+            supplyReduced = true;
+        } else if (balanceAfter == balanceBefore) {
+            t.safeTransfer(DEAD, burned);
+            if (t.balanceOf(address(this)) != balanceBefore - burned) revert UnsupportedToken();
+        } else {
+            // The token's burn() moved some, but not exactly the expected amount: refuse rather than guess.
+            revert UnsupportedToken();
+        }
+
+        totalBurned[token] += burned;
+        emit Burned(token, msg.sender, burned, supplyReduced);
     }
 
     // ---------------------------------------------------------------------
@@ -185,6 +234,10 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
         return _getLock(id);
     }
 
+    function isPermanent(uint256 id) external view returns (bool) {
+        return _getLock(id).unlockTime == PERMANENT;
+    }
+
     /// @notice Number of entries in the lock-id list of `user`.
     /// @dev The list is append-only: it also keeps locks the user later transferred away.
     ///      Check `getLock(id).owner` to know who owns a lock today.
@@ -208,12 +261,39 @@ contract TokenLocker is Ownable2Step, ReentrancyGuard {
     // Internal
     // ---------------------------------------------------------------------
 
+    function _lock(address token, uint256 amount, uint40 unlockTime, address lockOwner) private returns (uint256 id) {
+        if (msg.value != fee) revert WrongFee(fee, msg.value);
+        if (token == address(0) || lockOwner == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+
+        if (_pull(IERC20(token), amount) != amount) revert UnsupportedToken();
+
+        id = _locks.length;
+        _locks.push(
+            Lock({token: token, unlockTime: unlockTime, withdrawn: false, owner: lockOwner, amount: amount})
+        );
+        _userLockIds[lockOwner].push(id);
+        _tokenLockIds[token].push(id);
+
+        emit Locked(id, token, lockOwner, msg.sender, amount, unlockTime);
+    }
+
+    /// @dev Pulls `amount` from the caller and returns how much actually arrived.
+    function _pull(IERC20 t, uint256 amount) private returns (uint256 received) {
+        uint256 balanceBefore = t.balanceOf(address(this));
+        t.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 balanceAfter = t.balanceOf(address(this));
+        if (balanceAfter < balanceBefore) revert UnsupportedToken();
+        received = balanceAfter - balanceBefore;
+    }
+
     function _getLock(uint256 id) private view returns (Lock storage) {
         if (id >= _locks.length) revert LockNotFound();
         return _locks[id];
     }
 
     function _checkUnlockTime(uint40 unlockTime) private view {
+        if (unlockTime == PERMANENT) return;
         if (unlockTime <= block.timestamp || unlockTime > block.timestamp + MAX_LOCK_DURATION) {
             revert InvalidUnlockTime();
         }

@@ -12,7 +12,7 @@ if (!address || !isAddress(address)) {
 }
 
 const artifact = JSON.parse(
-  readFileSync("artifacts/contracts/TokenLocker.sol/TokenLocker.json", "utf8"),
+  readFileSync("artifacts/contracts/ElysianPyre.sol/ElysianPyre.json", "utf8"),
 );
 const client = createPublicClient({ transport: http(process.env.RPC_URL ?? "https://rpc.elyscan.live") });
 const onchain = (await client.getCode({ address })) ?? "0x";
@@ -23,7 +23,7 @@ if (onchain === "0x") {
   process.exit(1);
 }
 if (onchain.toLowerCase() === local.toLowerCase()) {
-  console.log(`MATCH: ${address} runs exactly the TokenLocker code from this repository.`);
+  console.log(`MATCH: ${address} runs exactly the Elysian Pyre code from this repository.`);
 } else {
   console.error(`MISMATCH: on-chain code differs from this repository (${(onchain.length - 2) / 2} vs ${(local.length - 2) / 2} bytes).`);
   process.exit(1);

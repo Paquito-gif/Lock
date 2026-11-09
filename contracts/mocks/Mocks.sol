@@ -62,3 +62,42 @@ contract ReentrantERC20 is ERC20 {
 
 /// @dev A fee recipient that refuses native currency.
 contract RejectNative {}
+
+/// @dev Standard token with a real burn(uint256) that lowers totalSupply.
+contract BurnableERC20 is ERC20 {
+    constructor() ERC20("Burnable", "BURN") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
+    }
+}
+
+/// @dev Has a burn(uint256) that returns successfully but does nothing.
+contract FakeBurnERC20 is ERC20 {
+    constructor() ERC20("FakeBurn", "FAKE") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function burn(uint256) external pure returns (bool) {
+        return true;
+    }
+}
+
+/// @dev burn(uint256) destroys only half of what it is asked to.
+contract HalfBurnERC20 is ERC20 {
+    constructor() ERC20("HalfBurn", "HALF") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount / 2);
+    }
+}

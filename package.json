@@ -1,12 +1,12 @@
 {
-  "name": "token-locker",
+  "name": "elysian-pyre",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
     "compile": "hardhat compile",
-    "deploy": "hardhat ignition deploy ignition/modules/TokenLocker.ts --network elysium",
+    "deploy": "hardhat ignition deploy ignition/modules/ElysianPyre.ts --network elysium",
     "check-bytecode": "tsx scripts/check-bytecode.ts"
   },
   "keywords": [],
