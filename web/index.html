@@ -335,7 +335,7 @@ pre.code .k { color: #ff9a5c; } pre.code .f { color: var(--hot); } pre.code .c {
       <div><span>Network</span><b>Elysium</b></div>
       <div><span>Chain</span><b>99901</b></div>
       <div><span>Fee</span><b>0.1 HYPE</b></div>
-      <div class="end"><span>Contract</span><b>Not deployed yet</b></div>
+      <div class="end"><span>Contract</span><b data-live-status>Not deployed yet</b></div>
     </div>
     <h1 class="mark lit">PYRE</h1>
     <p class="lede">Lock tokens until a date or forever, or throw them in the fire. One open-source contract on Elysium.</p>
@@ -386,14 +386,14 @@ pre.code .k { color: #ff9a5c; } pre.code .f { color: var(--hot); } pre.code .c {
       <div class="join">
         <span class="eyebrow">05 / Through the gate</span>
         <h2>Lock your tokens.</h2>
-        <div class="status"><span>Contract on Elysium, chain 99901</span><em>Preview</em></div>
+        <div class="status"><span data-live-where>Contract on Elysium, chain 99901</span><em data-live-tag>Preview</em></div>
         <div class="row">
           <div class="kv"><span>Fee</span><b>0.1 HYPE</b></div>
           <div class="kv"><span>Cap</span><b>1 HYPE</b></div>
           <div class="kv"><span>Tests</span><b>49</b></div>
         </div>
         <a class="primary" href="app.html">Open the app</a>
-        <p class="hint">The contract is not deployed yet: the app runs as a preview and nothing can be signed.</p>
+        <p class="hint" data-live-hint>The contract is not deployed yet: the app runs as a preview and nothing can be signed.</p>
         <div class="links"><button data-sheet="questions">Questions</button><i></i><button data-sheet="contract">Contract</button><i></i><a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">GitHub</a></div>
       </div>
     </div>
@@ -405,7 +405,7 @@ pre.code .k { color: #ff9a5c; } pre.code .f { color: var(--hot); } pre.code .c {
 <footer class="dock">
   <div class="glass">
     <span>Contract</span>
-    <code>Not deployed yet</code>
+    <code data-live-code>Not deployed yet</code>
     <a class="go" href="app.html">Open the app</a>
   </div>
 </footer>
@@ -464,6 +464,19 @@ pre.code .k { color: #ff9a5c; } pre.code .f { color: var(--hot); } pre.code .c {
   </div>
 </template>
 
+<script>
+// once the admin publishes the contract, swap the "not deployed" lines for the live address
+fetch('/api/config', { cache: 'no-store' }).then((r) => r.json()).then(({ contract }) => {
+  if (!/^0x[0-9a-fA-F]{40}$/.test(contract || '')) return;
+  const short = `${contract.slice(0, 6)}…${contract.slice(-4)}`, url = `https://elyscan.live/address/${contract}`;
+  const set = (sel, html) => document.querySelectorAll(sel).forEach((el) => { el.innerHTML = html; });
+  set('[data-live-status]', `<a href="${url}" target="_blank" rel="noopener">Live · ${short}</a>`);
+  set('[data-live-code]', short);
+  set('[data-live-tag]', 'Live');
+  set('[data-live-where]', `Contract <a href="${url}" target="_blank" rel="noopener">${short}</a> on Elysium`);
+  set('[data-live-hint]', 'Connect a wallet on Elysium, pick a token, sign. Nobody else can ever touch your lock.');
+}).catch(() => {});
+</script>
 <script type="module">
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';

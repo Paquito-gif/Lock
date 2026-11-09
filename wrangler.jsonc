@@ -1,0 +1,20 @@
+// Cloudflare Worker for the Elysian Pyre website (https://lock.paquito-dev.workers.dev)
+// Deploy: npx wrangler deploy
+{
+  "name": "lock",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-04",
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "kv_namespaces": [
+    { "binding": "CONFIG", "id": "REPLACE_WITH_KV_ID" }
+  ],
+  "vars": {
+    // the only wallet allowed to publish the contract address on the site
+    "ADMIN": "REPLACE_WITH_ADMIN_WALLET"
+  },
+  "observability": { "enabled": true }
+}

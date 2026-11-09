@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin · Elysian Pyre</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#07050a">
+<link rel="icon" href="assets/brand/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/app/app.css">
+<style>
+  .app-main input[type="text"] { width: 100%; height: 50px; padding: 0 16px; border-radius: 14px; border: 1px solid var(--line-strong); background: rgb(0 0 0 / .35); color: var(--ink); font: 500 15px var(--mono); }
+  .app-main input[type="text"]::placeholder { color: var(--ink-soft); opacity: 1; }
+  .app-main input[type="text"]:focus-visible { outline: none; border-color: var(--glow); box-shadow: 0 0 0 3px rgb(var(--glow-rgb) / .25); }
+  .admin-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 960px) { .admin-grid { grid-template-columns: minmax(0, 1fr); } }
+  .step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .step__n { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--display); color: #1a0702; background: linear-gradient(135deg, var(--hot), var(--glow)); }
+  .step.is-done .step__n { background: var(--elys); }
+  .step.is-locked { opacity: .45; }
+  .step__body { display: grid; gap: 14px; min-width: 0; }
+  .step__body h2 { font: 700 20px/1.2 var(--display); }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  @media (max-width: 640px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+  .addr { font: 500 14px/1.4 var(--mono); overflow-wrap: anywhere; color: var(--ink); }
+  .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 14px 16px; border-radius: 16px; background: rgb(255 255 255 / .04); border: 1px solid var(--line); display: grid; gap: 4px; min-width: 0; }
+  .stat span { font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+  .stat b { font: 700 18px var(--display); overflow-wrap: anywhere; }
+  .stat b.addr { font: 500 13px var(--mono); }
+  .act { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+  .act .field { gap: 6px; }
+  .act .btn { height: 50px; }
+  .divider { height: 1px; background: var(--line); }
+  .tag { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; background: rgb(255 255 255 / .08); }
+  .tag--ok { background: rgb(var(--elys-rgb) / .14); color: var(--elys); }
+  .tag--warn { background: rgb(var(--glow-rgb) / .16); color: #ffb48f; }
+</style>
+</head>
+<body>
+<div class="film film-glow" aria-hidden="true"></div>
+<div class="film film-lines" aria-hidden="true"></div>
+<div class="film film-noise" aria-hidden="true"></div>
+
+<header class="top">
+  <a class="brand" href="index.html" aria-label="Elysian Pyre, home">
+    <svg class="brand-lock" viewBox="0 0 22 26" aria-hidden="true"><path d="M5 11V7.5a6 6 0 0 1 12 0V11" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="1.5" y="11" width="19" height="13.5" rx="3" fill="currentColor"/><circle cx="11" cy="16.5" r="2" fill="#07050a"/><path d="M11 17.5v3.5" stroke="#07050a" stroke-width="1.8"/></svg>
+    <b>ELYSIAN <em>PYRE</em></b>
+  </a>
+  <nav class="glass nav" aria-label="Pages">
+    <a href="index.html">Home</a>
+    <a href="app.html">App</a>
+    <button class="btn btn--primary" type="button" data-connect>Connect wallet</button>
+  </nav>
+</header>
+
+<main class="app-main">
+  <section class="pane">
+    <div class="pane__head">
+      <span class="eyebrow">Admin</span>
+      <h1>Launch and run the contract</h1>
+      <p class="status" data-status><span class="dot"></span><span data-status-text>No wallet connected</span></p>
+      <p class="hint" data-admin-line>Reading the site settings…</p>
+    </div>
+  </section>
+
+  <div class="admin-grid">
+    <section class="pane" aria-labelledby="launch-h">
+      <h2 id="launch-h" class="sr">Launch</h2>
+
+      <div class="step" data-step="deploy">
+        <span class="step__n">1</span>
+        <div class="step__body">
+          <h2>Deploy the contract</h2>
+          <p class="hint">Your wallet signs one transaction that creates the Elysian Pyre contract on Elysium. Gas is about 0.0002 HYPE.</p>
+          <div class="row2">
+            <div class="field"><label for="d-owner">Admin of the contract</label><input id="d-owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… (your wallet)"></div>
+            <div class="field"><label for="d-recipient">Fee recipient</label><input id="d-recipient" type="text" autocomplete="off" spellcheck="false" placeholder="0x… (your wallet)"></div>
+          </div>
+          <div class="field"><label for="d-fee">Fee per lock or burn, in HYPE (1 at most)</label><input id="d-fee" type="text" inputmode="decimal" value="0.1"></div>
+          <button class="btn btn--primary btn--block" type="button" data-deploy>Connect wallet</button>
+          <p class="msg" data-deploy-msg role="status" aria-live="polite"></p>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="step is-locked" data-step="publish">
+        <span class="step__n">2</span>
+        <div class="step__body">
+          <h2>Publish it on the site</h2>
+          <p class="hint">Sign a message (free, no transaction). The site checks the signature comes from the admin wallet and that the code is the Elysian Pyre contract, then the app goes live.</p>
+          <div class="field"><label for="p-address">Contract address</label><input id="p-address" type="text" autocomplete="off" spellcheck="false" placeholder="0x… filled in after step 1"></div>
+          <button class="btn btn--primary btn--block" type="button" data-publish disabled>Sign and publish</button>
+          <p class="msg" data-publish-msg role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" aria-labelledby="run-h">
+      <div class="pane__head pane__head--row">
+        <h2 id="run-h">The contract</h2>
+        <span class="tag" data-live-tag>Not published</span>
+      </div>
+      <div data-run-empty><p class="empty">Once a contract is published, its numbers and settings show here.</p></div>
+      <div data-run hidden>
+        <p class="addr" data-run-address></p>
+        <div class="stats" style="margin-top:14px">
+          <div class="stat"><span>Locks created</span><b data-s-locks>–</b></div>
+          <div class="stat"><span>Fees waiting</span><b data-s-balance>–</b></div>
+          <div class="stat"><span>Fee</span><b data-s-fee>–</b></div>
+          <div class="stat"><span>Fee recipient</span><b class="addr" data-s-recipient>–</b></div>
+          <div class="stat"><span>Admin</span><b class="addr" data-s-owner>–</b></div>
+          <div class="stat"><span>Pending admin</span><b class="addr" data-s-pending>–</b></div>
+        </div>
+        <div style="display:grid;gap:18px;margin-top:20px">
+          <button class="btn btn--primary btn--block" type="button" data-a="withdrawFees">Send the fees to the recipient</button>
+          <form class="act" data-form="setFee" novalidate><div class="field"><label for="a-fee">New fee in HYPE (1 at most)</label><input id="a-fee" type="text" inputmode="decimal" placeholder="0.1"></div><button class="btn btn--secondary" type="submit">Set fee</button></form>
+          <form class="act" data-form="setFeeRecipient" novalidate><div class="field"><label for="a-recipient">New fee recipient</label><input id="a-recipient" type="text" autocomplete="off" spellcheck="false" placeholder="0x…"></div><button class="btn btn--secondary" type="submit">Change</button></form>
+          <form class="act" data-form="transferOwnership" novalidate><div class="field"><label for="a-owner">Hand the admin role to</label><input id="a-owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… (it must accept)"></div><button class="btn btn--secondary" type="submit">Propose</button></form>
+          <button class="btn btn--secondary btn--block" type="button" data-a="acceptOwnership" hidden>Accept the admin role</button>
+          <p class="msg" data-run-msg role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="app-foot">
+  <span>&copy; 2026 Elysian Pyre</span>
+  <span>Admin</span>
+  <a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">Source code</a>
+</footer>
+<script type="module" src="assets/app/admin.js"></script>
+</body>
+</html>

@@ -7,7 +7,8 @@
     "test": "hardhat test",
     "compile": "hardhat compile",
     "deploy": "hardhat ignition deploy ignition/modules/ElysianPyre.ts --network elysium",
-    "check-bytecode": "tsx scripts/check-bytecode.ts"
+    "check-bytecode": "tsx scripts/check-bytecode.ts",
+    "export-abi": "hardhat compile && node scripts/export-abi.mjs"
   },
   "keywords": [],
   "author": "",

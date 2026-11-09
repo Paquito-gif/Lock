@@ -21,8 +21,17 @@ const elysium = defineChain({
 });
 const pub = createPublicClient({ chain: elysium, transport: http(CHAIN.rpc) });
 const PERMANENT = 2n ** 40n - 1n;
-const deployed = isAddress(CONTRACT_ADDRESS);
-const PYRE = deployed ? getAddress(CONTRACT_ADDRESS) : null;
+// the contract address: config.js when set, else the one the admin published on the site (/api/config)
+let deployed = isAddress(CONTRACT_ADDRESS);
+let PYRE = deployed ? getAddress(CONTRACT_ADDRESS) : null;
+async function loadPublishedContract() {
+  if (deployed) return;
+  try {
+    const r = await fetch('/api/config', { cache: 'no-store' });
+    const j = await r.json();
+    if (isAddress(j.contract || '')) { PYRE = getAddress(j.contract); deployed = true; }
+  } catch { /* static preview: no API, the app stays in preview */ }
+}
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -460,4 +469,4 @@ function init() {
   loadLocks();
 }
 
-init();
+loadPublishedContract().then(init);

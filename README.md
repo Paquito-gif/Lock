@@ -86,3 +86,15 @@ npx hardhat compile && npm run check-bytecode -- <adresse_du_contrat>
 ```
 
 `MATCH` signifie que le contrat déployé est exactement ce code.
+
+## Site web et page admin
+
+Le site est dans `web/`. Il est servi par un Worker Cloudflare (`worker/index.js`, configuration dans `wrangler.jsonc`) :
+
+- `/` : la page d'accueil, `/app` : l'application, `/admin` : la page admin.
+- `GET /api/config` renvoie l'adresse du contrat publiée sur le site.
+- `POST /api/config` publie une adresse. Le Worker l'accepte seulement si la signature vient du wallet admin (`ADMIN` dans `wrangler.jsonc`) et si le code déployé à cette adresse est exactement celui d'Elysian Pyre (`worker/code-hash.js`).
+
+**Lancer le contrat depuis la page admin :** ouvre `/admin`, connecte le wallet admin, clique « Deploy contract » (une transaction), puis « Sign and publish » (une signature gratuite). L'app et la page d'accueil passent en ligne tout seuls. La même page permet ensuite de retirer les frais, de les modifier et de transférer le rôle d'admin.
+
+Après une modification du contrat, régénère l'ABI, le bytecode et l'empreinte du code avec `npm run export-abi`, puis redéploie le Worker avec `npx wrangler deploy`.
