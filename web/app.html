@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lock or burn tokens · Elysian Pyre</title>
+<meta name="description" content="Lock ERC-20 tokens on Elysium until a date or forever, burn them, and manage your locks.">
+<meta name="theme-color" content="#05161a">
+<link rel="icon" href="assets/brand/mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..600&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/system.css">
+<link rel="stylesheet" href="assets/motion/motion.css">
+<style>
+:root {
+  --p-bg: #05161a; --p-surface: #0b2126; --p-ink: #e9f2f2; --p-muted: #93aeb1;
+  --p-accent: #ff7a3d; --p-accent-ink: #05161a; --p-action: #ff7a3d; --p-action-ink: #05161a;
+  --p-inv-bg: #e9f2f2; --p-inv-surface: #d7e0e1; --p-inv-ink: #05161a; --p-inv-muted: #516063;
+  --p-inv-accent: #05161a; --p-inv-accent-ink: #e9f2f2; --p-inv-action: #05161a; --p-inv-action-ink: #e9f2f2;
+  --font-display: "Mona Sans", system-ui, sans-serif;
+  --font-text: "Mona Sans", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --display-weight: 500;
+  --display-tracking: -0.03em;
+  --display-tracking-xl: -0.04em;
+  --display-stretch: 104%;
+}
+</style>
+<link rel="stylesheet" href="assets/app/app.css">
+</head>
+<body class="app-page">
+<header class="nav nav--centre">
+  <div class="wrap nav__bar">
+    <a class="skip" href="#act">Skip to content</a>
+    <a class="nav__logo" href="index.html">Elysian Pyre</a>
+    <nav class="nav__links" aria-label="Main">
+      <div class="nav__item"><a class="nav__link" href="index.html#locks">Locks</a></div>
+      <div class="nav__item"><a class="nav__link" href="index.html#guarantees">Contract</a></div>
+      <div class="nav__item"><a class="nav__link" href="index.html#burn">Burn</a></div>
+      <div class="nav__item"><a class="nav__link" href="index.html#faq">Questions</a></div>
+    </nav>
+    <div class="nav__actions">
+      <button class="btn btn--primary" type="button" data-connect>Connect wallet</button>
+    </div>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="app-main">
+  <div class="wrap">
+    <p class="notice" data-notice hidden></p>
+    <div class="app-grid">
+      <section class="pane pane--act" id="act" aria-labelledby="act-h">
+        <div class="pane__head">
+          <h1 id="act-h">Lock or burn tokens</h1>
+          <p class="status" data-status><span class="dot"></span><span data-status-text>No wallet connected</span></p>
+        </div>
+
+        <div class="seg" role="group" aria-label="Action">
+          <button type="button" id="tab-lock" aria-pressed="true" data-mode="lock">Lock</button>
+          <button type="button" id="tab-forever" aria-pressed="false" data-mode="forever">Lock forever</button>
+          <button type="button" id="tab-burn" aria-pressed="false" data-mode="burn">Burn</button>
+        </div>
+        <p class="mode-line" data-mode-line>Tokens stay in the contract until the date you set. Then you withdraw them.</p>
+
+        <form id="form" class="form" aria-labelledby="act-h" novalidate>
+          <div class="field">
+            <label for="token">Token</label>
+            <select id="token" name="token" data-token-select></select>
+            <input id="token-custom" name="tokenCustom" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="0x… token address" data-token-custom hidden aria-label="Token address">
+            <p class="hint" data-token-info>Pick a token or paste any ERC-20 address on Elysium.</p>
+          </div>
+
+          <div class="field">
+            <div class="field__row"><label for="amount">Amount</label><button type="button" class="link-btn" data-max>Balance: <span data-balance>–</span></button></div>
+            <input id="amount" name="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0.0" data-amount>
+          </div>
+
+          <div class="field" data-only="lock">
+            <label for="unlock">Unlock date</label>
+            <input id="unlock" name="unlock" type="datetime-local" data-unlock>
+            <div class="chips" aria-label="Quick dates">
+              <button type="button" data-plus="30">30 days</button>
+              <button type="button" data-plus="90">90 days</button>
+              <button type="button" data-plus="180">6 months</button>
+              <button type="button" data-plus="365">1 year</button>
+            </div>
+          </div>
+
+          <div class="field" data-only="lock forever">
+            <label class="check"><input type="checkbox" data-other-owner> Lock for another wallet</label>
+            <input id="owner" name="owner" type="text" autocomplete="off" spellcheck="false" placeholder="0x… owner address" data-owner hidden aria-label="Owner address">
+          </div>
+
+          <dl class="summary" data-summary>
+            <div><dt>Fee</dt><dd data-fee>0.1 HYPE</dd></div>
+            <div data-only="lock"><dt>Opens</dt><dd data-sum-date>Pick a date</dd></div>
+            <div data-only="forever"><dt>Opens</dt><dd>Never</dd></div>
+            <div data-only="burn"><dt>Result</dt><dd>Tokens destroyed for good</dd></div>
+          </dl>
+
+          <label class="check check--warn" data-only="forever burn">
+            <input type="checkbox" data-confirm>
+            <span data-confirm-text>I understand these tokens can never be withdrawn.</span>
+          </label>
+
+          <button class="btn btn--primary btn--block" type="submit" data-submit>Connect wallet</button>
+          <p class="msg" data-msg role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="pane pane--list" id="mine" aria-labelledby="mine-h">
+        <div class="pane__head pane__head--row">
+          <h2 id="mine-h">My locks</h2>
+          <button type="button" class="link-btn" data-refresh>Refresh</button>
+        </div>
+        <div class="list" data-list>
+          <p class="empty" data-empty>Connect a wallet to see your locks.</p>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<template id="row-tpl">
+  <article class="lockrow">
+    <div class="lockrow__main">
+      <span class="tok" data-r-tok></span>
+      <div class="lockrow__what">
+        <p class="lockrow__amount" data-r-amount></p>
+        <p class="lockrow__meta" data-r-meta></p>
+      </div>
+      <span class="chip" data-r-chip></span>
+    </div>
+    <div class="lockrow__acts" data-r-acts>
+      <button type="button" class="btn btn--primary btn--sm" data-act="withdraw">Withdraw</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-act="extend">Extend</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-act="transfer">Transfer</button>
+    </div>
+    <form class="lockrow__edit" data-r-edit hidden novalidate>
+      <label class="sr" data-r-edit-label></label>
+      <input type="text" data-r-input>
+      <button type="submit" class="btn btn--primary btn--sm" data-r-ok>Confirm</button>
+      <button type="button" class="btn btn--secondary btn--sm" data-r-cancel>Cancel</button>
+    </form>
+  </article>
+</template>
+
+<footer class="app-foot">
+  <div class="wrap app-foot__row">
+    <span>&copy; 2026 Elysian Pyre</span>
+    <span data-contract-line>Contract not deployed yet</span>
+    <a class="link" href="https://github.com/Paquito-gif/Lock">Source code</a>
+  </div>
+</footer>
+<script type="module" src="assets/system.js"></script>
+<script type="module" src="assets/motion/motion.js"></script>
+<script type="module" src="assets/app/app.js"></script>
+</body>
+</html>

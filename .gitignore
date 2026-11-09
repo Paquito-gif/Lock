@@ -5,3 +5,6 @@ types/
 coverage/
 ignition/deployments/chain-31337/
 .env
+web/shots/
+web/.taste-skill/
+web/.impeccable/

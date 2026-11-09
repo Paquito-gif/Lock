@@ -1,0 +1,26 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..600&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/system.css">
+<link rel="stylesheet" href="assets/ui/cards.css">
+<link rel="stylesheet" href="assets/motion/motion.css">
+<link rel="stylesheet" href="assets/backgrounds/backgrounds.css">
+<link rel="stylesheet" href="assets/layout/layout.css">
+<link rel="stylesheet" href="assets/icons/icon.css">
+<!-- <html lang="en" data-radius="sharp">; keep this <style> after the links: layout.css resets --ly-scale -->
+<style>
+:root {
+  --p-bg: #05161a; --p-surface: #0b2126; --p-ink: #e9f2f2; --p-muted: #93aeb1;
+  --p-accent: #ff7a3d; --p-accent-ink: #05161a; --p-action: #ff7a3d; --p-action-ink: #05161a;
+  --p-inv-bg: #e9f2f2; --p-inv-surface: #d7e0e1; --p-inv-ink: #05161a; --p-inv-muted: #516063;
+  --p-inv-accent: #05161a; --p-inv-accent-ink: #e9f2f2; --p-inv-action: #05161a; --p-inv-action-ink: #e9f2f2;
+  --font-display: "Mona Sans", system-ui, sans-serif;
+  --font-text: "Mona Sans", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --display-weight: 500;
+  --display-tracking: -0.03em;
+  --display-tracking-xl: -0.04em;
+  --display-stretch: 104%;
+  --ly-scale: 0.96;
+}
+</style>
