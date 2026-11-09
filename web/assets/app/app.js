@@ -47,11 +47,11 @@ const txLink = h => `<a href="${CHAIN.explorer}/tx/${h}" target="_blank" rel="no
 const fmt = (v, d) => {
   const s = formatUnits(v, d);
   const [i, f = ''] = s.split('.');
-  const int = BigInt(i).toLocaleString('en-US');
+  const int = BigInt(i).toLocaleString('fr-FR');
   const frac = f.slice(0, 4).replace(/0+$/, '');
-  return frac ? `${int}.${frac}` : int;
+  return frac ? `${int},${frac}` : int;
 };
-const fmtDate = ts => new Date(Number(ts) * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const fmtDate = ts => new Date(Number(ts) * 1000).toLocaleString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const daysLeft = ts => Math.ceil((Number(ts) * 1000 - Date.now()) / 86400000);
 
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -66,19 +66,19 @@ function reason(err) {
     const rev = err.walk(e => e instanceof ContractFunctionRevertedError);
     if (rev?.data?.errorName) {
       const names = {
-        WrongFee: 'The fee changed. Refresh the page and try again.',
-        ZeroAmount: 'Enter an amount above zero.',
-        ZeroAddress: 'That address is not valid here.',
-        InvalidUnlockTime: 'Pick a date in the future, at most 100 years away.',
-        UnsupportedToken: 'This token is not supported (it takes a fee on transfer, or its burn does not match).',
-        NotLockOwner: 'Only the lock’s owner can do this.',
-        StillLocked: 'This lock has not reached its unlock date yet.',
-        AlreadyWithdrawn: 'This lock was already withdrawn.',
-        LockNotFound: 'This lock does not exist.',
+        WrongFee: 'Les frais ont changé. Rechargez la page et réessayez.',
+        ZeroAmount: 'Saisissez un montant supérieur à zéro.',
+        ZeroAddress: 'Cette adresse n’est pas valable ici.',
+        InvalidUnlockTime: 'Choisissez une date future, à 100 ans au plus.',
+        UnsupportedToken: 'Ce token n’est pas pris en charge (taxe sur les transferts, ou burn qui ne détruit pas le bon montant).',
+        NotLockOwner: 'Seul le propriétaire du lock peut faire ça.',
+        StillLocked: 'Ce lock n’a pas encore atteint sa date de déblocage.',
+        AlreadyWithdrawn: 'Ce lock a déjà été retiré.',
+        LockNotFound: 'Ce lock n’existe pas.',
       };
-      return names[rev.data.errorName] || `The contract refused: ${rev.data.errorName}.`;
+      return names[rev.data.errorName] || `Le contrat a refusé : ${rev.data.errorName}.`;
     }
-    if (err.walk(e => e.code === 4001 || /rejected|denied/i.test(e.shortMessage || ''))) return 'You rejected the request in your wallet.';
+    if (err.walk(e => e.code === 4001 || /rejected|denied/i.test(e.shortMessage || ''))) return 'Vous avez refusé la demande dans votre wallet.';
     return err.shortMessage || err.message;
   }
   return err?.message || String(err);
@@ -107,7 +107,7 @@ async function ensureChain() {
 }
 
 async function connect() {
-  if (!window.ethereum) { say('No browser wallet found. Install one such as MetaMask or Rabby, then reload this page.', 'err'); return; }
+  if (!window.ethereum) { say('Aucun wallet trouvé dans le navigateur. Installez-en un, comme MetaMask ou Rabby, puis rechargez la page.', 'err'); return; }
   try {
     const [acc] = await window.ethereum.request({ method: 'eth_requestAccounts' });
     state.account = getAddress(acc);
@@ -127,10 +127,10 @@ async function syncChain() {
 function renderStatus() {
   el.status.classList.toggle('is-on', !!state.account && state.chainOk);
   el.status.classList.toggle('is-warn', !!state.account && !state.chainOk);
-  if (!state.account) el.statusText.textContent = 'No wallet connected';
-  else if (!state.chainOk) el.statusText.textContent = `${short(state.account)} · switch to Elysium`;
+  if (!state.account) el.statusText.textContent = 'Aucun wallet connecté';
+  else if (!state.chainOk) el.statusText.textContent = `${short(state.account)} · passez sur Elysium`;
   else el.statusText.textContent = `${short(state.account)} · Elysium`;
-  el.connect.textContent = state.account ? (state.chainOk ? short(state.account) : 'Switch to Elysium') : 'Connect wallet';
+  el.connect.textContent = state.account ? (state.chainOk ? short(state.account) : 'Passer sur Elysium') : 'Connecter le wallet';
   el.connect.classList.toggle('btn--primary', !(state.account && state.chainOk));
   el.connect.classList.toggle('btn--secondary', !!(state.account && state.chainOk));
   renderSubmit();
@@ -162,21 +162,21 @@ async function loadToken() {
   el.balance.textContent = '–';
   if (!address) {
     el.tokenInfo.innerHTML = el.tokenSelect.value === 'custom' && el.tokenCustom.value.trim()
-      ? 'That is not a valid address.' : 'Pick a token or paste any ERC-20 address on Elysium.';
+      ? 'Ce n’est pas une adresse valide.' : 'Choisissez un token ou collez l’adresse de n’importe quel ERC-20 sur Elysium.';
     renderSubmit();
     return;
   }
-  el.tokenInfo.textContent = 'Reading the token…';
+  el.tokenInfo.textContent = 'Lecture du token…';
   try {
     const meta = await tokenMeta(address);
     const balance = state.account ? await pub.readContract({ address, abi: erc20Abi, functionName: 'balanceOf', args: [state.account] }) : null;
     if (seq !== tokenSeq) return;
     state.token = { ...meta, balance };
     el.balance.textContent = balance === null ? '–' : `${fmt(balance, meta.decimals)} ${meta.symbol}`;
-    el.tokenInfo.innerHTML = `<b>${meta.symbol}</b>, ${meta.decimals} decimals · <a class="link" href="${CHAIN.explorer}/token/${address}" target="_blank" rel="noopener">${short(address)}</a>`;
+    el.tokenInfo.innerHTML = `<b>${meta.symbol}</b>, ${meta.decimals} décimales · <a class="link" href="${CHAIN.explorer}/token/${address}" target="_blank" rel="noopener">${short(address)}</a>`;
   } catch {
     if (seq !== tokenSeq) return;
-    el.tokenInfo.textContent = 'Could not read a token at this address. Check the address, or try again if Elysium is not reachable.';
+    el.tokenInfo.textContent = 'Impossible de lire un token à cette adresse. Vérifiez-la, ou réessayez si Elysium ne répond pas.';
   }
   renderSubmit();
 }
@@ -184,13 +184,13 @@ async function loadToken() {
 // ---------------------------------------------------------------- form
 
 const MODE_LINES = {
-  lock: 'Tokens stay in the contract until the date you set. Then you withdraw them.',
-  forever: 'Tokens stay in the contract for good. Nobody can ever withdraw them, you included.',
-  burn: 'Tokens are destroyed. The token’s own burn lowers its supply; otherwise they go to the dead address.',
+  lock: 'Les tokens restent dans le contrat jusqu’à la date choisie. Ensuite, vous les retirez.',
+  forever: 'Les tokens restent dans le contrat pour toujours. Personne ne pourra les retirer, vous compris.',
+  burn: 'Les tokens sont détruits. Le burn du token baisse sa supply ; sinon ils partent à l’adresse morte.',
 };
 const CONFIRM_TEXT = {
-  forever: 'I understand these tokens can never be withdrawn.',
-  burn: 'I understand these tokens are destroyed for good.',
+  forever: 'Je comprends que ces tokens ne pourront jamais être retirés.',
+  burn: 'Je comprends que ces tokens seront détruits pour de bon.',
 };
 
 function setMode(mode) {
@@ -206,7 +206,8 @@ function setMode(mode) {
 
 function parsedAmount() {
   if (!state.token) return null;
-  const raw = el.amount.value.trim().replace(/,/g, '');
+  let raw = el.amount.value.trim().replace(/[\s\u202f]/g, '');
+  raw = raw.includes('.') ? raw.replace(/,/g, '') : raw.replace(',', '.');
   if (!/^\d*\.?\d*$/.test(raw) || raw === '' || raw === '.') return null;
   try { const v = parseUnits(raw, state.token.decimals); return v > 0n ? v : null; } catch { return null; }
 }
@@ -224,32 +225,32 @@ function ownerAddress() {
 }
 
 function problems() {
-  if (!deployed) return 'The contract is not deployed yet';
+  if (!deployed) return 'Contrat pas encore déployé';
   if (!state.account) return null; // the button connects
   if (!state.chainOk) return null; // the button switches
-  if (!state.token) return 'Pick a token';
+  if (!state.token) return 'Choisissez un token';
   const amt = parsedAmount();
-  if (!amt) return 'Enter an amount';
-  if (state.token.balance !== null && amt > state.token.balance) return 'Not enough tokens';
+  if (!amt) return 'Saisissez un montant';
+  if (state.token.balance !== null && amt > state.token.balance) return 'Solde insuffisant';
   if (state.mode === 'lock') {
     const t = unlockTs();
-    if (!t || t <= BigInt(Math.floor(Date.now() / 1000) + 60)) return 'Pick a future date';
+    if (!t || t <= BigInt(Math.floor(Date.now() / 1000) + 60)) return 'Choisissez une date future';
   }
-  if (state.mode !== 'burn' && !ownerAddress()) return 'Enter a valid owner address';
-  if (state.mode !== 'lock' && !el.confirm.checked) return 'Tick the box above';
+  if (state.mode !== 'burn' && !ownerAddress()) return 'Saisissez une adresse de propriétaire valide';
+  if (state.mode !== 'lock' && !el.confirm.checked) return 'Cochez la case ci-dessus';
   return null;
 }
 
 function renderSubmit() {
   const t = unlockTs();
-  el.sumDate.textContent = t ? `${fmtDate(t)} (${daysLeft(t)} days)` : 'Pick a date';
+  el.sumDate.textContent = t ? `${fmtDate(t)} (${daysLeft(t)} jours)` : 'Choisissez une date';
   el.owner.hidden = !el.otherOwner.checked;
   el.ownerHint.hidden = !el.otherOwner.checked;
   const amt = parsedAmount();
-  el.sumAmt.textContent = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}${state.mode === 'burn' ? ', removed from supply' : ''}` : 'Enter an amount';
+  el.sumAmt.textContent = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}${state.mode === 'burn' ? ', retirés de la supply' : ''}` : 'Saisissez un montant';
   if (state.mode !== 'lock') {
-    const what = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}` : 'these tokens';
-    el.confirmText.textContent = state.mode === 'burn' ? `I understand ${what} will be destroyed for good.` : `I understand ${what} can never be withdrawn, by me or anyone.`;
+    const what = amt && state.token ? `${fmt(amt, state.token.decimals)} ${state.token.symbol}` : 'ces tokens';
+    el.confirmText.textContent = state.mode === 'burn' ? `Je comprends que ${what} seront détruits pour de bon.` : `Je comprends que ${what} ne pourront jamais être retirés, ni par moi ni par personne.`;
   }
   $$('[data-plus]').forEach(b => {
     const t0 = unlockTs();
@@ -259,11 +260,11 @@ function renderSubmit() {
   el.tokenCustom.hidden = el.tokenSelect.value !== 'custom';
   if (state.busy) return;
   const p = problems();
-  const verb = { lock: 'Lock', forever: 'Lock forever', burn: 'Burn' }[state.mode];
+  const verb = { lock: 'Verrouiller', forever: 'Sceller', burn: 'Brûler' }[state.mode];
   let label;
-  if (!deployed) label = 'Contract not deployed yet';
-  else if (!state.account) label = 'Connect wallet';
-  else if (!state.chainOk) label = 'Switch to Elysium';
+  if (!deployed) label = 'Contrat pas encore déployé';
+  else if (!state.account) label = 'Connecter le wallet';
+  else if (!state.chainOk) label = 'Passer sur Elysium';
   else label = p || `${verb} ${el.amount.value.trim()} ${state.token.symbol}`;
   el.submit.textContent = label;
   el.submit.disabled = !!p;
@@ -284,10 +285,10 @@ async function submit(e) {
     const fee = state.fee ?? await pub.readContract({ address: PYRE, abi: pyreAbi, functionName: 'fee' });
     const allowance = await pub.readContract({ address: token.address, abi: erc20Abi, functionName: 'allowance', args: [state.account, PYRE] });
     if (allowance < amount) {
-      el.submit.textContent = `Approve ${token.symbol} in your wallet…`;
-      say(`Step 1 of 2: allow Elysian Pyre to move ${fmt(amount, token.decimals)} ${token.symbol}.`);
+      el.submit.textContent = `Autorisez ${token.symbol} dans votre wallet…`;
+      say(`Étape 1 sur 2 : autorisez Elysian Pyre à déplacer ${fmt(amount, token.decimals)} ${token.symbol}.`);
       const h = await w.writeContract({ address: token.address, abi: erc20Abi, functionName: 'approve', args: [PYRE, amount] });
-      say(`Waiting for the approval ${txLink(h)}…`);
+      say(`En attente de l’autorisation ${txLink(h)}…`);
       await pub.waitForTransactionReceipt({ hash: h });
     }
     const call = state.mode === 'lock'
@@ -296,13 +297,13 @@ async function submit(e) {
         ? { functionName: 'lockPermanent', args: [token.address, amount, ownerAddress()] }
         : { functionName: 'burn', args: [token.address, amount] };
     const { request } = await pub.simulateContract({ address: PYRE, abi: pyreAbi, account: state.account, value: fee, ...call });
-    el.submit.textContent = 'Confirm in your wallet…';
-    say(allowance < amount ? 'Step 2 of 2: sign the transaction.' : 'Sign the transaction in your wallet.');
+    el.submit.textContent = 'Confirmez dans votre wallet…';
+    say(allowance < amount ? 'Étape 2 sur 2 : signez la transaction.' : 'Signez la transaction dans votre wallet.');
     const hash = await w.writeContract(request);
-    say(`Sent ${txLink(hash)}, waiting for Elysium…`);
+    say(`Envoyé ${txLink(hash)}, en attente d’Elysium…`);
     const rc = await pub.waitForTransactionReceipt({ hash });
-    if (rc.status !== 'success') throw new Error('The transaction failed on chain.');
-    const done = { lock: 'Locked', forever: 'Locked forever', burn: 'Burned' }[state.mode];
+    if (rc.status !== 'success') throw new Error('La transaction a échoué sur la chaîne.');
+    const done = { lock: 'Verrouillé', forever: 'Scellé pour toujours', burn: 'Brûlé' }[state.mode];
     say(`${done}: ${fmt(amount, token.decimals)} ${token.symbol}. ${txLink(hash)}`, 'ok');
     el.amount.value = '';
     el.confirm.checked = false;
@@ -318,19 +319,19 @@ async function submit(e) {
 // ---------------------------------------------------------------- my locks
 
 async function loadLocks() {
-  if (!deployed) { el.list.innerHTML = '<p class="empty">Your locks show here once the contract is deployed.</p>'; return; }
-  if (!state.account) { el.list.innerHTML = '<p class="empty">Connect a wallet to see your locks.</p>'; return; }
-  el.list.innerHTML = '<p class="empty">Reading your locks…</p>';
+  if (!deployed) { el.list.innerHTML = '<p class="empty">Vos locks apparaîtront ici une fois le contrat déployé.</p>'; return; }
+  if (!state.account) { el.list.innerHTML = '<p class="empty">Connectez un wallet pour voir vos locks.</p>'; return; }
+  el.list.innerHTML = '<p class="empty">Lecture de vos locks…</p>';
   try {
     const n = await pub.readContract({ address: PYRE, abi: pyreAbi, functionName: 'userLockCount', args: [state.account] });
     const ids = n ? await pub.readContract({ address: PYRE, abi: pyreAbi, functionName: 'userLockIds', args: [state.account, 0n, n] }) : [];
     const unique = [...new Set(ids.map(String))].map(BigInt).reverse();
     const locks = await Promise.all(unique.map(async id => ({ id, ...(await pub.readContract({ address: PYRE, abi: pyreAbi, functionName: 'getLock', args: [id] })) })));
     const mine = locks.filter(l => getAddress(l.owner) === state.account);
-    if (!mine.length) { el.list.innerHTML = '<p class="empty">No locks for this wallet yet.</p>'; return; }
+    if (!mine.length) { el.list.innerHTML = '<p class="empty">Aucun lock pour ce wallet pour l’instant.</p>'; return; }
     el.list.replaceChildren(...await Promise.all(mine.map(row)));
   } catch (err) {
-    el.list.innerHTML = `<p class="empty">Could not read your locks: ${reason(err)}</p>`;
+    el.list.innerHTML = `<p class="empty">Impossible de lire vos locks : ${esc(reason(err))}</p>`;
   }
 }
 
@@ -342,13 +343,13 @@ async function row(l) {
   const open = !forever && BigInt(l.unlockTime) <= now;
   $('[data-r-tok]', node).textContent = meta.symbol.slice(0, 4);
   $('[data-r-amount]', node).textContent = `${fmt(l.amount, meta.decimals)} ${meta.symbol}`;
-  $('[data-r-meta]', node).textContent = forever ? `Lock #${l.id} · permanent`
-    : `Lock #${l.id} · ${l.withdrawn ? 'opened' : 'opens'} ${fmtDate(l.unlockTime)}`;
+  $('[data-r-meta]', node).textContent = forever ? `Lock n°${l.id} · permanent`
+    : `Lock n°${l.id} · ${l.withdrawn ? 'ouvert le' : 's’ouvre le'} ${fmtDate(l.unlockTime)}`;
   const chip = $('[data-r-chip]', node);
-  if (l.withdrawn) { chip.textContent = 'Withdrawn'; chip.classList.add('chip--done'); }
-  else if (forever) { chip.textContent = 'Forever'; chip.classList.add('chip--forever'); }
-  else if (open) { chip.textContent = 'Unlocked'; chip.classList.add('chip--open'); }
-  else { const d = daysLeft(l.unlockTime); chip.textContent = d > 365 ? `${Math.round(d / 365)} years left` : `${d} days left`; }
+  if (l.withdrawn) { chip.textContent = 'Retiré'; chip.classList.add('chip--done'); }
+  else if (forever) { chip.textContent = 'Pour toujours'; chip.classList.add('chip--forever'); }
+  else if (open) { chip.textContent = 'Débloqué'; chip.classList.add('chip--open'); }
+  else { const d = daysLeft(l.unlockTime); chip.textContent = d > 365 ? `encore ${Math.round(d / 365)} ans` : `encore ${d} j`; }
 
   const acts = $('[data-r-acts]', node);
   if (l.withdrawn) acts.replaceChildren();
@@ -362,16 +363,16 @@ async function row(l) {
     const b = ev.target.closest('[data-act]');
     if (!b) return;
     action = b.dataset.act;
-    if (action === 'withdraw') return tx(node, 'withdraw', [l.id], 'Withdrawn');
+    if (action === 'withdraw') return tx(node, 'withdraw', [l.id], 'Retiré');
     edit.hidden = false;
     input.id = `edit-${l.id}`;
     label.htmlFor = input.id;
     if (action === 'extend') {
-      input.type = 'datetime-local'; label.textContent = 'New unlock date';
+      input.type = 'datetime-local'; label.textContent = 'Nouvelle date de déblocage';
       const base = new Date(Math.max(Number(l.unlockTime) * 1000, Date.now()) + 30 * 86400000);
       input.value = new Date(base.getTime() - base.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
     } else {
-      input.type = 'text'; input.value = ''; input.placeholder = '0x… new owner'; label.textContent = 'New owner address';
+      input.type = 'text'; input.value = ''; input.placeholder = '0x… nouveau propriétaire'; label.textContent = 'Adresse du nouveau propriétaire';
     }
     input.focus();
   });
@@ -381,11 +382,11 @@ async function row(l) {
     if (action === 'extend') {
       const t = Math.floor(new Date(input.value).getTime() / 1000);
       if (!Number.isFinite(t) || BigInt(t) <= BigInt(l.unlockTime)) { input.setAttribute('aria-invalid', 'true'); return; }
-      tx(node, 'extendLock', [l.id, BigInt(t)], 'Extended');
+      tx(node, 'extendLock', [l.id, BigInt(t)], 'Prolongé');
     } else {
       const v = input.value.trim();
       if (!isAddress(v)) { input.setAttribute('aria-invalid', 'true'); return; }
-      tx(node, 'transferLock', [l.id, getAddress(v)], 'Transferred');
+      tx(node, 'transferLock', [l.id, getAddress(v)], 'Transféré');
     }
   });
   return node;
@@ -397,9 +398,9 @@ async function tx(node, functionName, args, done) {
   try {
     if (!state.chainOk) await ensureChain();
     const { request } = await pub.simulateContract({ address: PYRE, abi: pyreAbi, account: state.account, functionName, args });
-    say('Sign the transaction in your wallet.');
+    say('Signez la transaction dans votre wallet.');
     const hash = await wallet().writeContract(request);
-    say(`Sent ${txLink(hash)}, waiting for Elysium…`);
+    say(`Envoyé ${txLink(hash)}, en attente d’Elysium…`);
     await pub.waitForTransactionReceipt({ hash });
     say(`${done}. ${txLink(hash)}`, 'ok');
     await Promise.all([loadToken(), loadLocks()]);
@@ -413,16 +414,16 @@ async function tx(node, functionName, args, done) {
 
 function init() {
   el.tokenSelect.innerHTML = KNOWN_TOKENS.map(t => `<option value="${t.address}">${t.symbol}</option>`).join('')
-    + '<option value="custom">Another token…</option>';
+    + '<option value="custom">Autre token…</option>';
   const d = new Date(Date.now() + 30 * 86400000);
   el.unlock.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   el.unlock.min = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
   if (!deployed) {
     el.notice.hidden = false;
-    el.notice.innerHTML = '<b>The contract is not deployed on Elysium yet.</b> You can try the form, but nothing can be signed until its address is published here.';
+    el.notice.innerHTML = '<b>Le contrat n’est pas encore déployé sur Elysium.</b> Vous pouvez essayer le formulaire, mais rien ne pourra être signé avant que son adresse soit publiée ici.';
   } else {
-    el.contractLine.innerHTML = `Contract <a class="link" href="${CHAIN.explorer}/address/${PYRE}" target="_blank" rel="noopener"><code>${short(PYRE)}</code></a>`;
+    el.contractLine.innerHTML = `Contrat <a class="link" href="${CHAIN.explorer}/address/${PYRE}" target="_blank" rel="noopener"><code>${short(PYRE)}</code></a>`;
     pub.readContract({ address: PYRE, abi: pyreAbi, functionName: 'fee' }).then(f => {
       state.fee = f;
       el.fee.textContent = `${fmt(f, 18)} HYPE`;
@@ -454,7 +455,8 @@ function init() {
     window.ethereum.request({ method: 'eth_accounts' }).then(a => { if (a[0]) { state.account = getAddress(a[0]); syncChain(); } }).catch(() => {});
   }
   el.tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
-  setMode('lock');
+  const fromHash = location.hash.slice(1);
+  setMode(['lock', 'forever', 'burn'].includes(fromHash) ? fromHash : 'lock');
   loadToken();
   loadLocks();
 }

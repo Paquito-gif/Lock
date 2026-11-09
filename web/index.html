@@ -1,462 +1,1115 @@
 <!doctype html>
-<html lang="en" data-type="software" data-radius="sharp" data-buttons="tonal" data-motion>
+<html lang="fr">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Elysian Pyre: token locks and burns on Elysium</title>
-<meta name="description" content="Lock ERC-20 tokens on Elysium until a date or forever, or burn them out of the supply. Open-source contract, no admin access to your tokens, 0.1 HYPE per action.">
-<meta name="site-kind" content="software">
-<meta name="page-type" content="software">
-<meta name="theme-color" content="#05161a">
-<link rel="icon" href="assets/brand/mark.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Mona+Sans:wdth,wght@75..125,400..600&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/system.css">
-<link rel="stylesheet" href="assets/ui/cards.css">
-<link rel="stylesheet" href="assets/motion/motion.css">
-<link rel="stylesheet" href="assets/backgrounds/backgrounds.css">
-<link rel="stylesheet" href="assets/layout/layout.css">
-<link rel="stylesheet" href="assets/icons/icon.css">
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Elysian Pyre</title>
+<meta name="description" content="Elysian Pyre : verrouillez des tokens ERC-20 sur Elysium jusqu'à une date ou pour toujours, ou brûlez-les. Contrat open source." />
+<meta name="theme-color" content="#07050a" />
+<link rel="icon" href="assets/brand/mark.svg" type="image/svg+xml" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
 <style>
+/* Layout : une scène 3D fixe plein écran, pilotée par le scroll (p = 0 → 1).
+   Les panneaux sont des calques fixes qui apparaissent entre data-in et data-out.
+   Palette : la nuit d'Elysium, une seule chaleur (la braise du bûcher), et la lumière turquoise derrière la porte. */
 :root {
-  --p-bg: #05161a; --p-surface: #0b2126; --p-ink: #e9f2f2; --p-muted: #93aeb1;
-  --p-accent: #ff7a3d; --p-accent-ink: #05161a; --p-action: #ff7a3d; --p-action-ink: #05161a;
-  --p-inv-bg: #e9f2f2; --p-inv-surface: #d7e0e1; --p-inv-ink: #05161a; --p-inv-muted: #516063;
-  --p-inv-accent: #05161a; --p-inv-accent-ink: #e9f2f2; --p-inv-action: #05161a; --p-inv-action-ink: #e9f2f2;
-  --font-display: "Mona Sans", system-ui, sans-serif;
-  --font-text: "Mona Sans", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --display-weight: 500;
-  --display-tracking: -0.03em;
-  --display-tracking-xl: -0.04em;
-  --display-stretch: 104%;
-  --ly-scale: 0.96;
+  color-scheme: dark;
+  --abyss: #07050a;        /* fond, nuit devant la porte */
+  --glow: #ff8a3d;         /* braise : accent principal */
+  --glow-rgb: 255 138 61;
+  --hot: #ffd27a;          /* métal chauffé à blanc */
+  --elys: #8fe8dc;         /* la lumière d'Elysium derrière la porte */
+  --elys-rgb: 143 232 220;
+  --ink: #f6efe9;
+  --ink-soft: #b9a89c;
+  --display: 'Unbounded', 'Arial Black', system-ui, sans-serif;
+  --body: 'Instrument Sans', 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scrollbar-width: none; background: var(--abyss); }
+html::-webkit-scrollbar { display: none; }
+body { background: var(--abyss); color: var(--ink); font: 500 16px/1.45 var(--body); overflow-x: hidden; -webkit-font-smoothing: antialiased; }
+::selection { background: rgb(var(--glow-rgb) / .35); color: #fff; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--glow); outline-offset: 3px; border-radius: 8px; }
+a { color: inherit; }
+
+#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; z-index: 0; opacity: 0; transition: opacity 1.4s ease; }
+#scene.on { opacity: 1; }
+.track { height: 1000vh; }
+
+/* ---------- calques "pellicule" ---------- */
+.film { position: fixed; inset: 0; pointer-events: none; }
+.film-vignette { z-index: 2; background: radial-gradient(120% 90% at 50% 50%, transparent 52%, rgb(6 2 2 / .7) 100%); }
+.film-lines { z-index: 3; opacity: .3; mix-blend-mode: soft-light;
+  background: repeating-linear-gradient(0deg, rgb(255 255 255 / .06) 0 1px, transparent 1px 4px); }
+.film-noise { inset: -60%; z-index: 3; opacity: .07;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23g)'/></svg>");
+  animation: noise 1s steps(5) infinite; }
+@keyframes noise { 0%{transform:translate(0,0)} 25%{transform:translate(-4%,3%)} 50%{transform:translate(3%,-2%)} 75%{transform:translate(-2%,-4%)} 100%{transform:translate(0,0)} }
+.film-flash { z-index: 4; opacity: 0; background: radial-gradient(70% 70% at 50% 45%, #ffffff 0%, #e6fffb 55%, #9ff0e4 100%); }
+
+/* ---------- loader : le mot se remplit de braise ---------- */
+@property --load { syntax: '<number>'; inherits: true; initial-value: 0; }
+.boot { --load: 0; position: fixed; inset: 0; z-index: 60; overflow: hidden;
+  background: radial-gradient(80% 45% at 50% 110%, rgb(var(--glow-rgb) / .2), transparent 70%), linear-gradient(#030204, #0a0507 70%, #160806);
+  transition: --load 1s var(--ease-out), opacity 1.1s ease, visibility 0s linear 1.1s; }
+.boot.gone { opacity: 0; visibility: hidden; }
+.boot-embers span { position: absolute; bottom: -12px; left: var(--x); width: calc(3px * var(--s)); aspect-ratio: 1; border-radius: 50%;
+  background: var(--hot); box-shadow: 0 0 10px var(--glow), 0 0 3px #fff; opacity: 0;
+  animation: ember 7s ease-in var(--d) infinite; }
+@keyframes ember { 0%{transform:translate(0,0);opacity:0} 12%{opacity:.9} 100%{transform:translate(calc(26px * var(--s)), -80vh);opacity:0} }
+.boot-word { position: absolute; inset: 50% 0 auto; transform: translateY(-55%); text-align: center; }
+.boot-word .mark { display: block; }
+.boot-word .ghost { color: transparent; -webkit-text-stroke: 1px rgb(var(--glow-rgb) / .25); }
+.boot-word .fill { position: absolute; inset: -.3em 0; padding-top: .3em;
+  -webkit-mask-image: linear-gradient(to top, #000 calc(var(--load) * 100% - 4%), transparent calc(var(--load) * 100% + 4%));
+  mask-image: linear-gradient(to top, #000 calc(var(--load) * 100% - 4%), transparent calc(var(--load) * 100% + 4%)); }
+.boot-meta { position: absolute; left: max(24px, env(safe-area-inset-left)); right: max(24px, env(safe-area-inset-right)); bottom: calc(28px + env(safe-area-inset-bottom));
+  display: flex; justify-content: space-between; gap: 16px; font: 500 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+.boot-meta .msg { color: var(--ink); }
+.boot-meta .pct { color: var(--glow); font-variant-numeric: tabular-nums; min-width: 4ch; text-align: right; }
+.boot-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgb(255 255 255 / .06); }
+.boot-bar i { display: block; height: 100%; background: var(--glow); box-shadow: 0 0 14px var(--glow); transform-origin: left; transform: scaleX(var(--load)); }
+
+/* ---------- wordmark ---------- */
+.mark { font-family: var(--display); font-weight: 800; font-size: clamp(88px, 21vw, 340px); line-height: .9; letter-spacing: -.035em; user-select: none; }
+.mark.lit { background: linear-gradient(180deg, #fff7e8 8%, var(--hot) 40%, var(--glow) 75%, #c2361c 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 18px rgb(var(--glow-rgb) / .55)) drop-shadow(0 0 70px rgb(var(--glow-rgb) / .3)); }
+
+/* ---------- verre ---------- */
+.glass { background: rgb(18 10 10 / .4); border: 1px solid rgb(255 255 255 / .13); border-radius: 999px;
+  backdrop-filter: blur(14px) saturate(1.5); -webkit-backdrop-filter: blur(14px) saturate(1.5);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 12px 32px rgb(0 0 0 / .3); }
+
+/* ---------- en-tête ---------- */
+.top { position: fixed; z-index: 20; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(16px + env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) 16px max(24px, env(safe-area-inset-left)); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand-lock { width: 22px; height: 26px; color: var(--glow); filter: drop-shadow(0 0 8px rgb(var(--glow-rgb) / .7)); }
+.brand b { font: 700 15px var(--display); letter-spacing: .14em; white-space: nowrap; }
+.brand b em { font-style: normal; font-weight: 500; opacity: .6; }
+.nav { display: flex; gap: 2px; padding: 4px; }
+.nav button, .nav a { padding: 8px 14px; border-radius: 999px; font: 500 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; text-decoration: none; white-space: nowrap; transition: background .3s, color .3s; }
+.nav button:hover { background: rgb(255 255 255 / .1); }
+.nav .cta { background: var(--glow); color: #1a0702; }
+.nav .cta:hover { background: #ffb27f; }
+.icon-btn { width: 40px; height: 40px; display: grid; place-items: center; text-decoration: none; }
+
+/* ---------- rail de progression ---------- */
+.rail { position: fixed; z-index: 8; right: max(28px, calc(env(safe-area-inset-right) + 12px)); top: 22vh; bottom: 22vh; width: 1px; background: rgb(255 255 255 / .14); }
+.rail i { position: absolute; left: 0; top: 0; width: 1px; height: 0; background: var(--glow); box-shadow: 0 0 10px var(--glow); }
+.rail i::after { content: ''; position: absolute; bottom: -4px; left: -3.5px; width: 8px; height: 8px; border-radius: 50%; background: inherit; box-shadow: inherit; }
+
+/* ---------- panneaux ---------- */
+.stage { position: fixed; inset: 0; z-index: 6; pointer-events: none; }
+.panel { position: absolute; inset: 0; opacity: 0; visibility: hidden; will-change: opacity, transform; }
+.panel button, .panel a, .panel .card { pointer-events: auto; }
+.eyebrow { font: 500 11px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--glow); }
+
+.hero .facts { position: absolute; top: calc(92px + env(safe-area-inset-top)); left: max(24px, env(safe-area-inset-left)); right: max(64px, env(safe-area-inset-right));
+  display: grid; grid-template-columns: repeat(4, auto); justify-content: space-between; gap: 16px; }
+.hero .facts div { display: grid; gap: 4px; }
+.hero .facts span { font: 500 10px var(--mono); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-soft); }
+.hero .facts b { font: 700 14px var(--display); letter-spacing: .04em; }
+.hero .facts .end { text-align: right; }
+.hero .facts .end b { color: var(--hot); }
+.hero .mark { position: absolute; inset: 50% 0 auto; transform: translateY(-55%); text-align: center; }
+.hero .lede { position: absolute; left: 0; right: 0; top: calc(50% + clamp(60px, 11vw, 170px)); text-align: center; padding: 0 24px;
+  font: 500 clamp(15px, 1.4vw, 19px) var(--body); color: #f3e6dc; text-shadow: 0 2px 20px rgb(0 0 0 / .85); text-wrap: balance; }
+.scroll-hint { position: absolute; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; justify-items: center; gap: 10px;
+  font: 500 10px var(--mono); letter-spacing: .22em; text-transform: uppercase; color: var(--ink-soft); }
+.scroll-hint i { width: 18px; height: 30px; border: 1px solid rgb(255 255 255 / .35); border-radius: 10px; position: relative; }
+.scroll-hint i::after { content: ''; position: absolute; left: 50%; top: 6px; width: 3px; height: 6px; margin-left: -1.5px; border-radius: 2px; background: var(--glow); animation: wheel 1.8s var(--ease-out) infinite; }
+@keyframes wheel { 0%{transform:translateY(0);opacity:1} 80%{transform:translateY(10px);opacity:0} 100%{opacity:0} }
+
+.chapter { display: flex; flex-direction: column; justify-content: flex-end; gap: 18px; max-width: 780px;
+  padding: 0 max(24px, env(safe-area-inset-left)) calc(140px + env(safe-area-inset-bottom)); }
+.chapter.right { left: auto; right: 72px; text-align: right; align-items: flex-end; }
+.chapter.mid { max-width: none; align-items: center; justify-content: flex-start; text-align: center; padding-top: calc(120px + env(safe-area-inset-top)); padding-bottom: 0; }
+.chapter::before { content: ''; position: absolute; z-index: -1; left: -160px; bottom: 30px; width: min(1000px, 96vw); height: 520px; pointer-events: none;
+  background: radial-gradient(closest-side, rgb(8 3 3 / .6), transparent); }
+.chapter.right::before { left: auto; right: -160px; }
+.chapter.mid::before { left: 50%; top: 40px; bottom: auto; transform: translateX(-50%); background: radial-gradient(closest-side, rgb(14 4 2 / .62), transparent); }
+.chapter h2 { font: 700 clamp(34px, 5vw, 80px)/1.02 var(--display); letter-spacing: -.025em; text-wrap: balance; text-shadow: 0 4px 40px rgb(0 0 0 / .7); }
+.chapter p { font-size: clamp(16px, 1.3vw, 19px); line-height: 1.5; color: #f1e5db; max-width: 34em; text-shadow: 0 2px 16px rgb(0 0 0 / .85); }
+
+.section-title { font: 800 clamp(28px, 3.6vw, 56px)/1 var(--display); letter-spacing: -.02em; text-wrap: balance; }
+
+.stats { display: flex; flex-direction: column; justify-content: space-between;
+  padding: calc(96px + env(safe-area-inset-top)) max(72px, env(safe-area-inset-right)) calc(120px + env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
+.stats .section-title { text-shadow: 0 4px 40px rgb(0 0 0 / .7); }
+.stats .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.stats article { display: grid; gap: 10px; align-content: start; }
+.stats .num { font: 800 clamp(56px, 8vw, 150px)/.9 var(--display); letter-spacing: -.045em; font-variant-numeric: tabular-nums;
+  background: linear-gradient(180deg, #fff3e2, var(--hot) 45%, var(--glow) 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 30px rgb(var(--glow-rgb) / .35)); }
+.stats .num small { font-size: .38em; letter-spacing: 0; }
+.stats h3 { font: 700 clamp(18px, 1.7vw, 26px) var(--display); text-shadow: 0 2px 20px rgb(0 0 0 / .8); }
+.stats p { color: #e9dbd0; max-width: 24em; text-shadow: 0 2px 16px rgb(0 0 0 / .85); }
+
+.rituals { display: flex; flex-direction: column; justify-content: center; gap: 28px;
+  padding: calc(96px + env(safe-area-inset-top)) max(72px, env(safe-area-inset-right)) calc(120px + env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
+.rituals .section-title { text-shadow: 0 4px 40px rgb(60 20 0 / .6); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 1100px; }
+.card { position: relative; overflow: hidden; border-radius: 20px; padding: 16px 16px 18px; display: grid; gap: 12px; text-decoration: none;
+  background: rgb(16 8 8 / .5); border: 1px solid rgb(255 255 255 / .15);
+  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .12), 0 24px 60px rgb(20 6 2 / .45);
+  transition: transform .5s var(--ease-out), border-color .4s, box-shadow .4s; }
+.card:hover { transform: translateY(-6px); border-color: color-mix(in srgb, var(--c) 70%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .18), 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), 0 30px 70px color-mix(in srgb, var(--c) 30%, transparent); }
+.card img { width: 100%; aspect-ratio: 16 / 11; object-fit: cover; border-radius: 12px; display: block; transition: transform .8s var(--ease-out); }
+.card:hover img { transform: scale(1.04); }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.card small { font: 500 11px var(--mono); letter-spacing: .14em; color: var(--c); text-transform: uppercase; }
+.card h3 { font: 700 clamp(20px, 2vw, 28px) var(--display); color: #fff; text-shadow: 0 0 24px var(--c); }
+.card dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+.card dt { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: #d6c6ba; align-self: center; }
+.card dd { font: 700 15px var(--display); text-align: right; }
+.formula { font: 500 clamp(12px, 1vw, 14px) var(--mono); letter-spacing: .06em; color: #fff1e8; text-shadow: 0 2px 14px rgb(40 10 0 / .7); }
+.ghost-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 999px; text-decoration: none;
+  border: 1px solid rgb(255 255 255 / .35); font: 500 12px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  background: rgb(16 8 8 / .35); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: background .3s, gap .4s var(--ease-out); }
+.ghost-btn:hover { background: rgb(255 255 255 / .14); gap: 16px; }
+
+/* ---------- carte finale ---------- */
+.finale .stack { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  padding: calc(84px + env(safe-area-inset-top)) 16px calc(76px + env(safe-area-inset-bottom)); }
+.join { width: min(460px, 100%); padding: 24px; border-radius: 26px; display: grid; gap: 16px;
+  background: rgb(4 18 20 / .55); border: 1px solid rgb(var(--elys-rgb) / .25);
+  backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .14), 0 40px 90px rgb(0 0 0 / .5), 0 0 80px rgb(var(--elys-rgb) / .15); pointer-events: auto; }
+.join .eyebrow { color: var(--elys); }
+.join h2 { font: 800 clamp(26px, 3vw, 36px)/1.05 var(--display); letter-spacing: -.02em; }
+.status { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #d9efec; }
+.status em { margin-left: auto; font: 500 10px var(--mono); font-style: normal; letter-spacing: .14em; text-transform: uppercase; padding: 5px 10px; border-radius: 999px; background: rgb(var(--glow-rgb) / .16); color: #ffb48f; white-space: nowrap; }
+.row { display: flex; align-items: stretch; gap: 10px; }
+.kv { display: grid; gap: 2px; flex: 1; min-width: 0; padding: 10px 12px; border-radius: 14px; background: rgb(255 255 255 / .05); border: 1px solid rgb(255 255 255 / .08); }
+.kv span { font: 500 10px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: #a9c9c4; }
+.kv b { font: 700 15px var(--display); }
+.primary { height: 52px; border-radius: 999px; font: 700 14px var(--display); letter-spacing: .04em; color: #1a0702; display: grid; place-items: center; text-decoration: none;
+  background: linear-gradient(90deg, var(--hot), var(--glow)); box-shadow: 0 0 30px rgb(var(--glow-rgb) / .45); transition: transform .2s, box-shadow .3s; }
+.primary:hover { box-shadow: 0 0 46px rgb(var(--glow-rgb) / .7); }
+.primary:active { transform: scale(.98); }
+.hint { font-size: 13px; color: #b9d3cf; text-align: center; text-wrap: balance; }
+.links { display: flex; justify-content: center; align-items: center; gap: 12px; font: 500 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: #a9c9c4; }
+.links button:hover, .links a:hover { color: var(--ink); }
+.links a { text-decoration: none; }
+.links i { width: 3px; height: 3px; border-radius: 50%; background: currentColor; opacity: .5; }
+
+/* ---------- dock ---------- */
+.dock { position: fixed; z-index: 20; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100vw - 32px); }
+.dock .glass { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 18px; white-space: nowrap; }
+.dock span { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.dock code { font: 500 12px var(--mono); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dock .go { padding: 9px 16px; border-radius: 999px; background: var(--glow); color: #1a0702; font: 700 12px var(--display); text-decoration: none; }
+.sound { position: fixed; z-index: 20; right: max(18px, env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom)); }
+.sound .on { display: none; }
+.sound[aria-pressed="true"] .on { display: block; }
+.sound[aria-pressed="true"] .off { display: none; }
+.sound .on rect { animation: eq 1s ease-in-out infinite; transform-origin: center bottom; transform-box: fill-box; }
+.sound .on rect:nth-child(2) { animation-delay: -.3s; } .sound .on rect:nth-child(3) { animation-delay: -.6s; } .sound .on rect:nth-child(4) { animation-delay: -.15s; }
+@keyframes eq { 50% { transform: scaleY(.35); } }
+
+/* ---------- sheet : questions et contrat ---------- */
+.sheet { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; background: rgb(10 5 6 / .86);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); animation: sheetIn .6s var(--ease-out); }
+.sheet[hidden] { display: none; }
+@keyframes sheetIn { from { opacity: 0; transform: translateY(24px); } }
+.sheet-bar { display: flex; align-items: center; gap: 14px; padding: calc(14px + env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) 14px max(20px, env(safe-area-inset-left)); border-bottom: 1px solid rgb(255 255 255 / .08); }
+.seg { display: flex; gap: 4px; padding: 4px; margin-right: auto; margin-left: 12px; }
+.seg button { padding: 8px 14px; border-radius: 999px; font: 500 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+.seg button[aria-selected="true"] { background: rgb(255 255 255 / .12); color: var(--ink); }
+.close { width: 40px; height: 40px; border-radius: 50%; font-size: 22px; border: 1px solid rgb(255 255 255 / .14); }
+.close:hover { background: rgb(255 255 255 / .08); }
+.sheet-body { flex: 1; overflow: auto; padding: 28px max(20px, env(safe-area-inset-right)) 48px max(20px, env(safe-area-inset-left)); }
+.sheet-inner { max-width: 820px; margin: 0 auto; display: grid; gap: 28px; }
+.sheet-inner h2 { font: 800 clamp(26px, 3vw, 40px)/1.05 var(--display); letter-spacing: -.02em; }
+.qa { display: grid; gap: 0; }
+.qa article { display: grid; gap: 8px; padding: 18px 0; border-bottom: 1px solid rgb(255 255 255 / .1); }
+.qa h3 { font: 700 17px var(--display); }
+.qa p { color: #e3d5ca; max-width: 60ch; }
+.guarantees { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.guarantees div { padding: 16px; border-radius: 16px; background: rgb(255 255 255 / .04); border: 1px solid rgb(255 255 255 / .09); display: grid; gap: 6px; }
+.guarantees b { font: 700 15px var(--display); }
+.guarantees span { color: #d8c8bc; font-size: 15px; }
+pre.code { overflow-x: auto; padding: 18px 20px; border-radius: 16px; background: #0d0708; border: 1px solid rgb(255 255 255 / .1); font: 500 13px/1.7 var(--mono); color: #eadbd0; }
+pre.code .k { color: #ff9a5c; } pre.code .f { color: var(--hot); } pre.code .c { color: #8a7a70; } pre.code .n { color: var(--elys); }
+.sheet-inner .ghost-btn { align-self: start; justify-self: start; }
+
+.toast { position: fixed; z-index: 70; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0;
+  padding: 12px 18px; border-radius: 999px; background: #1a0d0a; border: 1px solid rgb(var(--glow-rgb) / .4); font-size: 14px; transition: .45s var(--ease-out); pointer-events: none; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- mobile ---------- */
+@media (max-width: 760px) {
+  .nav > :not(.cta) { display: none; }
+  .rail { display: none; }
+  .hero .facts { grid-template-columns: 1fr 1fr; right: 16px; left: 16px; }
+  .chapter { padding: 0 16px calc(120px + env(safe-area-inset-bottom)); }
+  .chapter.right { right: 0; }
+  .chapter.mid { padding-top: calc(96px + env(safe-area-inset-top)); }
+  .stats { padding: 84px 16px 100px; justify-content: center; gap: 24px; }
+  .stats .grid { grid-template-columns: 1fr; gap: 18px; }
+  .stats .num { font-size: 60px; }
+  .stats p { display: none; }
+  .rituals { padding: 76px 16px 84px; gap: 14px; }
+  .formula { display: none; }
+  .cards { grid-template-columns: 1fr; gap: 10px; }
+  .card { grid-template-columns: 96px minmax(0, 1fr); align-items: center; padding: 10px; border-radius: 16px; gap: 4px 12px; }
+  .card img { grid-row: span 2; aspect-ratio: 1; }
+  .card dl { display: none; }
+  .dock { left: 16px; right: 68px; transform: none; max-width: none; }
+  .dock .glass { justify-content: space-between; }
+  .dock span { display: none; }
+  .guarantees { grid-template-columns: 1fr; }
+  .seg button { padding: 8px 10px; }
+  .sheet-bar .brand b { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .film-noise, .boot-embers span, .scroll-hint i::after { animation: none; }
 }
 </style>
-<link rel="stylesheet" href="assets/layout/demo.css">
-<link rel="stylesheet" href="assets/ui/base.css">
-<link rel="stylesheet" href="assets/ui/window/fragment.css">
-<link rel="stylesheet" href="assets/ui/checklist/fragment.css">
-<link rel="stylesheet" href="assets/ui/toggles/fragment.css">
-<link rel="stylesheet" href="assets/ui/notify/fragment.css">
-<link rel="stylesheet" href="assets/ui/terminal-run/fragment.css">
-<link rel="stylesheet" href="assets/ui/code/fragment.css">
-<link rel="stylesheet" href="assets/diagrams/diagram.css">
-<script src="assets/backgrounds/backgrounds.js"></script>
-<script>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
-<link rel="modulepreload" href="assets/moments/moments.js">
-<link rel="modulepreload" href="assets/moments/lib.js">
-<link rel="modulepreload" href="assets/moments/marquee-row/moment.js">
-<style>
-  /* hero: the dealt effect is the art frame's ground; the window and the result card sit on it */
-  .hero__art > .ly-piece--note { left: var(--s-6); bottom: var(--s-6); width: 300px; z-index: 2; }
-  .hero__proof { font-size: var(--t-small); color: var(--muted); }
-  .ly-piece--main .d-row { grid-template-columns: 36px minmax(0, 1fr) 84px 104px; }
-  .ly-piece--main .d-main { padding-right: var(--ly-cut-room); }
-  .d-row svg.d-thumb { width: 36px; height: 36px; background: none; border-radius: 0; }
-  .d-win--dark { background: #0b1f24; }
-  .d-win--dark .d-row b, .d-win--dark .d-main__head h4 { color: #e9f2f2; }
-  .d-win--dark .d-row small, .d-win--dark .d-row .num { color: #a9c0c2; }
-  .d-win--dark .d-row, .d-win--dark .d-rows { border-color: rgb(255 255 255 / .07); }
-  .d-win--dark .d-tabs span { color: #93aeb1; } .d-win--dark .d-tabs span.is-on { background: rgb(233 242 242 / .1); color: #e9f2f2; }
-  .d-chip--lock { background: rgb(233 242 242 / .08); color: #cfe0e1; }
-  .d-chip--open { background: rgb(255 122 61 / .16); color: #ffb48f; }
-  .d-chip--forever { background: rgb(147 174 177 / .14); color: #b9cdcf; }
-  .d-note__line { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; color: #b9cdcf; border-top: 1px solid rgb(255 255 255 / .07); }
-  .d-note__line:first-of-type { border-top: 0; }
-  .d-note__line i { width: 18px; height: 18px; border-radius: 50%; flex: none; display: grid; place-items: center; background: rgb(255 122 61 / .18); color: #ffb48f; font-style: normal; font-size: 13px; font-weight: 500; }
-  .d-note__line b { font-weight: 500; color: #e9f2f2; }
-  .d-card--dark { background: #102a30; color: #e9f2f2; box-shadow: 0 0 0 1px rgb(255 255 255 / .08), 0 24px 48px -24px rgb(0 0 0 / .8); }
-  .d-card--dark h5 { color: #e9f2f2; }
-  @media (max-width: 1023px) { .hero__art > .ly-piece--note { left: var(--s-4); bottom: var(--s-4); width: 270px; } }
-  @media (max-width: 639px) { .ly-piece--main .d-row { grid-template-columns: 36px minmax(0, 1fr) 104px; } .ly-piece--main .d-row .num { display: none; } }
-
-  /* app-frame (sections-library.md, the whole recipe) */
-  .app.ui { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); margin-top: var(--s-7); background: var(--u-bg); border: 1px solid var(--u-border); border-radius: var(--u-r); box-shadow: var(--u-shadow); }
-  .app > .app__pane { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
-  .app > .app__pane + .app__pane { border-left: 1px solid var(--u-line); }
-  .app > .app__pane > .ui-panel { width: 100%; border: 0; border-radius: 0; box-shadow: none; }
-  .app > .app__pane::after { content: ""; position: absolute; inset: auto 0 0 0; height: 64px; background: linear-gradient(transparent, var(--u-bg)); pointer-events: none; }
-  @media (min-width: 1024px) and (max-width: 1279px) { .app.ui { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); } }
-  @media (max-width: 1023px) {
-    .app.ui { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
-    .app > .app__pane--list { max-height: 252px; }
-    .app > .app__pane--list::after { display: none; }
-    .app .ui-win__side { display: none; }
-    .app .ui-win__body { grid-template-columns: minmax(0, 1fr); }
-    .app > .app__pane + .app__pane { border-left: 0; border-top: 1px solid var(--u-line); }
-  }
-  @media (max-width: 639px) {
-    .app.ui { grid-template-rows: minmax(0, 1fr); }
-    .app > .app__pane--list { display: none; }
-    .app > .app__pane + .app__pane { border-top: 0; }
-  }
-  /* the open lock: the product's own detail view, built from the kit's ui tokens */
-  .lk { padding: 20px 24px; display: grid; gap: 18px; font: 400 13px/1.45 var(--font-text); color: var(--u-text); }
-  .lk__head { display: flex; align-items: center; gap: 10px; }
-  .lk__head .ui-title { font-size: 14px; }
-  .lk__amount { font: 500 34px/1.1 var(--font-display); letter-spacing: -0.02em; color: var(--u-ink); }
-  .lk__amount small { font: 400 15px/1 var(--font-text); color: var(--u-muted); margin-left: 6px; letter-spacing: 0; }
-  .lk__bar { height: 6px; border-radius: 99px; background: var(--u-line); overflow: hidden; }
-  .lk__bar i { display: block; height: 100%; width: var(--v); background: var(--accent); border-radius: inherit; }
-  .lk__meta { display: flex; justify-content: space-between; color: var(--u-muted); font-size: 12px; margin-top: -10px; }
-  .lk__rows { display: grid; border-top: 1px solid var(--u-line); }
-  .lk__rows > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--u-line); }
-  .lk__rows dt { color: var(--u-muted); }
-  .lk__rows dd { margin: 0; color: var(--u-ink); font-variant-numeric: tabular-nums; }
-  .lk__rows code { font: 400 12.5px/1.4 var(--font-mono); }
-  .lk__acts { display: flex; gap: 8px; flex-wrap: wrap; }
-  .lk__acts .ui-btn[aria-disabled="true"] { opacity: .45; }
-  .lk__log { display: grid; gap: 0; }
-  .lk__log li { list-style: none; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--u-line); }
-  .lk__log ul { margin: 0; padding: 0; }
-  .lk__log svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; margin-top: 2px; color: var(--u-muted); }
-  .lk__log time { color: var(--u-muted); font-size: 12px; }
-
-  /* review fixes: no strike-through on a passed check, no bounce on switches, scrollable code */
-  .ui-check.is-done .ui-check__label { text-decoration: none; }
-  .ui-switch, .ui-switch > i { transition-timing-function: cubic-bezier(.22, 1, .36, 1) !important; }
-  .faq-code .ui-code__pre { overflow-x: auto !important; }
-  .d-main__head .d-h { font: 500 16px/1.2 var(--font-text); color: #e9f2f2; }
-  ::selection { background: rgb(255 122 61 / .32); color: #fff; }
-  /* the skip link (system.md, Base): out of the flow until focused */
-  .skip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .skip:focus { width: auto; height: auto; clip-path: none; padding: 8px 12px; background: var(--bg); z-index: 20; }
-  /* guarantees: one --p-h for the card group */
-  #guarantees .panel { --p-h: 300px; }
-  @media (min-width: 1024px) and (max-width: 1279px) { #guarantees .panel { --p-h: 208px; } }
-  @media (max-width: 639px) { #guarantees .panel { --p-h: 172px; } #burn .frame--split { min-height: 240px; } #burn .mo-host { margin-top: var(--s-5); } }
-  /* close-word: the name hand-set to run line to line (5.2 em wide in Mona Sans at 104%) */
-  .close__word { font-size: min(calc((100vw - 2 * var(--gut)) / 5.3), 240px); line-height: 1; padding-bottom: .02em; }
-  #locks .grid > p { margin-top: -9px; }
-  .close__word { overflow: visible; }
-  .faq-code { margin-top: var(--s-5); }
-  .faq-code .ui-code { width: 100%; }
-  @media (max-width: 1023px) { #burn .mo-host { display: none; } }
-  @media (min-width: 640px) and (max-width: 1023px) { .faq-code .ui-code__hint { display: none; } #faq .faq__item { padding-block: var(--s-4); } }
-  @media (min-width: 640px) and (max-width: 1023px) { #burn .frame--split { min-height: 320px; } }
-  /* burn: the diagram frame */
-  #burn .frame--split { aspect-ratio: auto; min-height: 420px; }
-  #burn .dg { position: absolute; inset: 0; }
-  #burn .mo-host { margin-top: var(--s-8); }
-</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
 </head>
 <body>
-<!-- type: software (an on-chain token lock and burn tool; site-kind software)
-     deal: hero collage, nav nav-cards dealt, re-dealt to nav-centre (no photographs for its cards), close close-word,
-     footer footer-dark, rhythm surface-pairs (#burn on .ground-surface), buttons tonal, mark wordmark,
-     palette brand (Elysium's own night teal #05161a from its chain mark, one ember accent #ff7a3d for the pyre),
-     type mona (Mona Sans + Geist Mono), radius sharp (fintech)
-     effect: grain-gradient in the hero art frame; card ground painterly-landscape dealt, replaced after review by grain-gradient held still in the page palette
-     moments: marquee-row as the last row of #burn; no hero moment
-     screens: hero 1, #locks 1, #guarantees 2, #burn 1, #faq 1, footer 1 -->
-<header class="nav nav--centre">
-  <div class="wrap nav__bar">
-    <a class="skip" href="#locks">Skip to content</a>
-    <a class="nav__logo" href="#top">Elysian Pyre</a>
-    <nav class="nav__links" aria-label="Main">
-      <div class="nav__item">
-        <a class="nav__link" href="#locks">Locks</a></div>
-      <div class="nav__item"><a class="nav__link" href="#guarantees">Contract</a></div>
-      <div class="nav__item"><a class="nav__link" href="#burn">Burn</a></div>
-      <div class="nav__item"><a class="nav__link" href="#faq">Questions</a></div>
-    </nav>
-    <div class="nav__actions">
-      <a class="btn btn--primary" href="app.html">Try the app</a>
-    </div>
-    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="Menu">
-      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 5h14M2 13h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-    </button>
+<canvas id="scene" aria-hidden="true"></canvas>
+<div class="film film-vignette"></div>
+<div class="film film-lines"></div>
+<div class="film film-noise"></div>
+<div class="film film-flash"></div>
+
+<!-- LOADER : le mot se remplit de braise pendant la construction de la scène -->
+<div class="boot" aria-live="polite">
+  <div class="boot-embers" aria-hidden="true">
+    <span style="--x:6%;--d:0s;--s:1"></span><span style="--x:15%;--d:3.1s;--s:1.6"></span><span style="--x:24%;--d:1.2s;--s:.7"></span>
+    <span style="--x:33%;--d:4.6s;--s:1.2"></span><span style="--x:42%;--d:.4s;--s:1.8"></span><span style="--x:51%;--d:2.4s;--s:.8"></span>
+    <span style="--x:60%;--d:5.2s;--s:1.3"></span><span style="--x:69%;--d:1.7s;--s:1"></span><span style="--x:78%;--d:3.8s;--s:1.5"></span>
+    <span style="--x:87%;--d:.9s;--s:.7"></span><span style="--x:95%;--d:2.9s;--s:1.1"></span>
   </div>
+  <div class="boot-word" aria-hidden="true">
+    <span class="mark ghost">PYRE</span>
+    <span class="mark lit fill">PYRE</span>
+  </div>
+  <div class="boot-meta">
+    <span>Elysian Pyre</span>
+    <span class="msg">Allumage</span>
+    <span class="pct">0%</span>
+  </div>
+  <div class="boot-bar"><i></i></div>
+</div>
+
+<header class="top">
+  <a class="brand" href="#" data-go="0" aria-label="Elysian Pyre, retour en haut">
+    <svg class="brand-lock" viewBox="0 0 22 26" aria-hidden="true"><path d="M5 11V7.5a6 6 0 0 1 12 0V11" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="1.5" y="11" width="19" height="13.5" rx="3" fill="currentColor"/><circle cx="11" cy="16.5" r="2" fill="#07050a"/><path d="M11 17.5v3.5" stroke="#07050a" stroke-width="1.8"/></svg>
+    <b>ELYSIAN <em>PYRE</em></b>
+  </a>
+  <nav class="glass nav" aria-label="Sections">
+    <button data-go="0.145">Verrou</button>
+    <button data-go="0.665">Bûcher</button>
+    <button data-go="0.8">Rituels</button>
+    <button data-sheet="questions">Questions</button>
+    <a class="cta" href="app.html">Ouvrir l'app</a>
+  </nav>
+  <a class="glass icon-btn" href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener" aria-label="Code source sur GitHub">
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+  </a>
 </header>
 
-<main id="top">
-  <section class="hero hero--collage" aria-labelledby="hero-h">
-    <div class="wrap"><div class="hero-text grid hero__grid">
-      <div class="hero__text span-6">
-        <h1 id="hero-h">Token locks and burns on Elysium</h1>
-        <p class="hero__lead">Lock ERC-20 tokens until a date or forever, or burn them out of the supply. One open-source contract that gives nobody else access to your tokens, for 0.1&nbsp;HYPE per action.</p>
-        <div class="btn-row"><a class="btn btn--primary" href="app.html">Try the app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a><a class="btn btn--secondary" href="https://github.com/Paquito-gif/Lock">Read the contract</a></div>
-        <p class="hero__proof">Not deployed yet: the app runs as a preview until the contract goes live on chain 99901.</p>
-      </div>
-      <div class="hero__art span-6 start-7" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="31" data-fx-params='{"speed":0.35,"tint":0.6,"calmX":0.3,"calmY":0.85}' role="img" aria-label="The Elysian Pyre app: a list of token locks with their status, and a burn that lowered a token's supply">
-        <div class="ly-piece ly-piece--main d-win d-win--dark" aria-hidden="true">
-          <div class="d-win__bar"><span>Elysian Pyre · My locks</span></div>
-          <div class="d-win__body">
-            <div class="d-side">
-              <span class="is-on"><i></i>Lock</span><span><i></i>Lock forever</span><span><i></i>Burn</span>
-              <span class="d-side__label">Tokens</span><span><i></i>USDC</span><span><i></i>WHYPE</span><span><i></i>LP tokens</span>
-            </div>
-            <div class="d-main">
-              <div class="d-main__head"><b class="d-h">My locks</b></div>
-              <div class="d-tabs"><span class="is-on">All 6</span><span>Locked 3</span><span>Forever 2</span></div>
-              <div class="d-rows">
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #12 · permanent</small></div><span class="num">250,000</span><span class="d-chip d-chip--forever">Forever</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #9 · opens 21 Dec 2026</small></div><span class="num">18,400</span><span class="d-chip d-chip--lock">42 days left</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #8 · opened 2 Nov 2026</small></div><span class="num">1,250</span><span class="d-chip d-chip--open">Unlocked</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#2775ca"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">$</text></svg><div><b>USDC</b><small>Lock #6 · opens 7 Mar 2027</small></div><span class="num">6,000</span><span class="d-chip d-chip--lock">118 days left</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#3a4a4f"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">LP</text></svg><div><b>WHYPE-USDC LP</b><small>Lock #5 · permanent</small></div><span class="num">80,000</span><span class="d-chip d-chip--forever">Forever</span></div>
-                <div class="d-row"><svg class="d-thumb tk" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="18" fill="#0f6b62"/><text x="18" y="22.5" text-anchor="middle" font-size="12" font-family="Geist Mono, monospace" fill="#e9f2f2">W</text></svg><div><b>WHYPE</b><small>Lock #3 · opens 9 Nov 2027</small></div><span class="num">640</span><span class="d-chip d-chip--lock">1 year left</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="ly-piece ly-piece--note d-card d-card--dark" aria-hidden="true" data-ly-steps="700">
-          <div class="d-card__row"><h5>Burn 500,000 tokens</h5><span class="d-chip d-chip--open" data-step data-step-at="4">Burned</span></div>
-          <div class="d-note__line" data-step><i>1</i><span>Pulled from <b>your wallet</b></span></div>
-          <div class="d-note__line" data-step><i>2</i><span>The token&rsquo;s <b>burn()</b> called</span></div>
-          <div class="d-note__line" data-step><i>3</i><span>Total supply down by <b>500,000</b></span></div>
-        </div>
-      </div>
-    </div></div>
+<div class="rail" aria-hidden="true"><i></i></div>
+
+<!-- Chaque panneau : data-in / data-out = plage de scroll (0 → 1) où il est visible -->
+<main class="stage">
+  <section class="panel hero" data-in="-1" data-out="0.06">
+    <div class="facts">
+      <div><span>Réseau</span><b>Elysium</b></div>
+      <div><span>Chaîne</span><b>99901</b></div>
+      <div><span>Frais</span><b>0,1 HYPE</b></div>
+      <div class="end"><span>Contrat</span><b>Pas encore déployé</b></div>
+    </div>
+    <h1 class="mark lit">PYRE</h1>
+    <p class="lede">Verrouillez des tokens jusqu'à une date ou pour toujours, ou jetez-les au feu. Un contrat open source sur Elysium.</p>
+    <div class="scroll-hint"><i></i><span>Faites défiler</span></div>
   </section>
 
-  <section class="section" id="locks" aria-labelledby="locks-h">
-    <div class="wrap">
-      <div class="grid">
-        <h2 id="locks-h" class="span-6">Every lock in one place, with its unlock date</h2>
-        <p class="span-6 start-7 muted">Open a lock to see its token, amount and the day it opens. Withdraw once that day passes, push it later, or hand the lock to another wallet. <a class="link" href="https://github.com/Paquito-gif/Lock">Read the contract</a></p>
-      </div>
-      <div class="ui app fill" role="img" aria-label="The Elysian Pyre app: the list of locks beside lock 9, 18,400 USDC that opens on 21 December 2026">
-        <div class="app__pane app__pane--list">
-          <div class="ui ui-panel ui-win" data-ui="window" data-open="Unlocked" data-work="Withdrawing" data-done="Withdrawn">
-            <div class="ui-win__bar">
-              
-              <span class="ui-win__crumb">Elysian Pyre <i>/</i> <b>My locks</b></span>
-              <span class="ui-spacer"></span>
-              
-            </div>
-            <div class="ui-win__body">
-              <nav class="ui-win__side" aria-hidden="true">
-                <span class="ui-win__nav is-on"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Locked<em>5</em></span>
-                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5-.4"/></svg>Unlocked<em>1</em></span>
-                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="M5 8c0-1.7 1.3-3 3-3s3 1.3 3 3-1.3 3-3 3-3-1.3-3-3Z"/><path d="M2.5 8h1M12.5 8h1"/></svg>Forever<em>2</em></span>
-                <span class="ui-win__nav"><svg class="ui-icon" viewBox="0 0 16 16"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg>Withdrawn<em>2</em></span>
-                <span class="ui-win__label">Tokens</span>
-                <span class="ui-win__nav"><span class="ui-win__hash">#</span>USDC</span>
-                <span class="ui-win__nav"><span class="ui-win__hash">#</span>WHYPE</span>
-              </nav>
-              <div class="ui-win__main">
-                <div class="ui-win__cols" aria-hidden="true"><span>Token</span><span>Lock</span><span>Status</span><span>Opens</span></div>
-                <ul class="ui-win__rows">
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">18,400 USDC</span><span class="ui-win__sub">Lock #9</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">21 Dec</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">1,250 WHYPE</span><span class="ui-win__sub">Lock #8</span><span class="ui-win__st is-you" data-st>Unlocked</span><span class="ui-win__age">2 Nov</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">250,000 LP</span><span class="ui-win__sub">Lock #12</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">6,000 USDC</span><span class="ui-win__sub">Lock #6</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">7 Mar</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">640 WHYPE</span><span class="ui-win__sub">Lock #3</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">9 Nov 27</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="4">LP</span><span class="ui-win__who">80,000 LP</span><span class="ui-win__sub">Lock #5</span><span class="ui-win__st" data-st>Forever</span><span class="ui-win__age">Never</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="1">$</span><span class="ui-win__who">2,500 USDC</span><span class="ui-win__sub">Lock #4</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">1 Oct</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="5">W</span><span class="ui-win__who">300 WHYPE</span><span class="ui-win__sub">Lock #2</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">30 Jan</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="2">$</span><span class="ui-win__who">12,000 USDC</span><span class="ui-win__sub">Lock #1</span><span class="ui-win__st" data-st>Locked</span><span class="ui-win__age">15 Feb</span></li>
-                  <li class="ui-win__row" data-row><span class="ui-avatar" data-tone="3">W</span><span class="ui-win__who">90 WHYPE</span><span class="ui-win__sub">Lock #0</span><span class="ui-win__st is-done" data-st>Withdrawn</span><span class="ui-win__age">20 Sep</span></li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="app__pane app__pane--open">
-          <div class="ui ui-panel lk">
-            <div class="lk__head"><span class="ui-avatar" data-tone="1">$</span><div class="ui-title">Lock #9 · USDC</div><span class="ui-spacer"></span><span class="ui-chip">Locked</span></div>
-            <div class="lk__amount">18,400<small>USDC</small></div>
-            <div class="lk__bar" style="--v: 64%"><i></i></div>
-            <div class="lk__meta"><span>Locked 12 Aug 2026</span><span>Opens in 42 days</span></div>
-            <dl class="lk__rows">
-              <div><dt>Opens</dt><dd>21 Dec 2026, 14:00 UTC</dd></div>
-              <div><dt>Owner</dt><dd><code>0x3f8e…a91c</code> (you)</dd></div>
-              <div><dt>Created by</dt><dd><code>0x3f8e…a91c</code></dd></div>
-              <div><dt>Type</dt><dd>Timed lock, can be extended</dd></div>
-              <div><dt>Fee paid</dt><dd>0.1 HYPE</dd></div>
-            </dl>
-            <div class="lk__acts"><span class="ui-btn" aria-disabled="true">Withdraw on 21 Dec</span><span class="ui-btn ui-btn--ghost">Extend</span><span class="ui-btn ui-btn--ghost">Transfer</span></div>
-            <div class="lk__log">
-              <div class="ui-meta">History</div>
-              <ul>
-                <li><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg><span>Extended from 30 Nov to 21 Dec</span><time>2 Oct</time></li>
-                <li><svg viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg><span>Locked 18,400 USDC</span><time>12 Aug</time></li>
-                <li><svg viewBox="0 0 16 16"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span>Approved USDC for Elysian Pyre</span><time>12 Aug</time></li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
+  <section class="panel chapter" data-in="0.1" data-out="0.195">
+    <span class="eyebrow">01 / Verrouiller</span>
+    <h2>Un cadenas, une date.<br />Rien ne s'ouvre avant.</h2>
+    <p>Choisissez un token, un montant et une date. Les tokens restent dans le contrat jusqu'à ce jour-là. Ensuite, seul le propriétaire du lock peut les retirer.</p>
+  </section>
+
+  <section class="panel chapter right" data-in="0.235" data-out="0.335">
+    <span class="eyebrow">02 / Sceller</span>
+    <h2>Certains cadenas<br />n'ont pas de clé.</h2>
+    <p>Un lock permanent ne s'ouvre jamais, même pour vous. C'est la façon la plus nette de prouver qu'une liquidité restera en place.</p>
+  </section>
+
+  <section class="panel chapter" data-in="0.375" data-out="0.465">
+    <span class="eyebrow">03 / Personne d'autre</span>
+    <h2>Même l'admin<br />reste dehors.</h2>
+    <p>L'admin règle les frais, plafonnés à 1 HYPE dans le code, et rien d'autre. Pas de pause, aucune fonction qui touche à vos tokens.</p>
+  </section>
+
+  <section class="panel stats" data-in="0.5" data-out="0.6">
+    <h2 class="section-title">Ce que le code garantit</h2>
+    <div class="grid">
+      <article><span class="eyebrow">Plafond</span><div class="num">1<small> HYPE</small></div><h3>Frais maximum</h3><p>Le plafond est une constante. Aucune mise à jour ne peut le relever.</p></article>
+      <article><span class="eyebrow">Admin</span><div class="num">0</div><h3>Accès à vos tokens</h3><p>Seul le propriétaire d'un lock peut retirer, et seulement après sa date.</p></article>
+      <article><span class="eyebrow">Tests</span><div class="num">49</div><h3>Tests au vert</h3><p>Unitaires, fuzz et invariants. Le code est public, sous licence MIT.</p></article>
     </div>
   </section>
 
-  <section class="section g2" id="guarantees" aria-labelledby="guarantees-h">
-    <div class="wrap">
-      <div class="group">
-        <div class="section-head">
-          <h2 id="guarantees-h">A contract that keeps your tokens yours. <span class="muted">Nobody else can withdraw them, the admin included.</span></h2>
-        </div>
-        <div class="grid">
-          <article class="card card--row span-6 m-nolift">
-            <h3>Checks the owner and the date</h3>
-            <p>A withdrawal goes through only for the lock&rsquo;s owner, after its unlock date, and only once.</p>
-            <div class="panel panel--flush" role="img" aria-label="A withdrawal of lock 9 checked step by step: the lock exists, the owner signed, the date passed, the tokens sent" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="11" data-fx-params='{"speed":0,"tint":0.55,"grainMotion":0}'>
-              <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max:340px;--ax:max(24px, 50% - 170px);--ay:40px;--ay-sm:40px" data-ui-loop>
-                <div class="ui ui-panel ui-checks" data-ui="checklist">
-                  <div class="ui-checks__head"><div class="ui-title">Withdraw lock #9</div><span class="ui-spacer"></span><div class="ui-meta" data-checks-count>1 of 4</div></div>
-                  <div class="ui-checks__bar"><i data-checks-bar style="--k:0.25"></i></div>
-                  <ul class="ui-checks__list">
-                    <li class="ui-check is-done"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Lock #9 exists</span></li>
-                    <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">Signed by the lock&rsquo;s owner</span></li>
-                    <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">21 Dec 2026 has passed</span></li>
-                    <li class="ui-check"><span class="ui-check__box"><svg viewBox="0 0 16 16"><path d="m4.5 8.2 2.3 2.3 4.7-5"/></svg></span><span class="ui-check__label">18,400 USDC sent to the owner</span></li>
-                  </ul>
-                </div>
-              </div></div>
-            </div>
-          </article>
-          <article class="card card--row span-6 m-nolift">
-            <h3>Gives the admin no key to your tokens</h3>
-            <p>The admin can change the fee, capped at 1&nbsp;HYPE in the code, and nothing else. There is no pause.</p>
-            <div class="panel panel--flush" role="img" aria-label="What the admin may do: move locked tokens, off; pause withdrawals, off; shorten a lock, off; set the fee, on; choose the fee wallet, on" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="23" data-fx-params='{"speed":0,"tint":0.45,"grainMotion":0}'>
-              <div class="stage stage--fade-b"><div class="at-right to-edge" style="--ax:32px;--ay:40px">
-                <div class="ui ui-panel ui-toggles" data-ui="toggles">
-                  <div class="ui-head">
-                    <svg class="ui-icon ui-toggles__ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.8 13 4v3.6c0 3-2.1 5.4-5 6.6-2.9-1.2-5-3.6-5-6.6V4z"/><path d="m5.8 8 1.6 1.6 3-3.2"/></svg>
-                    <div class="ui-title">What the admin may do</div><span class="ui-spacer"></span><div class="ui-meta" data-tg-count>2 of 5 on</div>
-                  </div>
-                  <ul class="ui-toggles__list">
-                    <li class="ui-tg"><span class="ui-tg__text"><span class="ui-tg__label">Move locked tokens</span><span class="ui-tg__sub">No function for it exists</span></span><button class="ui-switch" type="button" role="switch" aria-checked="false" aria-label="Move locked tokens" disabled><i></i></button></li>
-                    <li class="ui-tg"><span class="ui-tg__text"><span class="ui-tg__label">Pause withdrawals</span><span class="ui-tg__sub">The contract has no pause</span></span><button class="ui-switch" type="button" role="switch" aria-checked="false" aria-label="Pause withdrawals" disabled><i></i></button></li>
-                    <li class="ui-tg"><span class="ui-tg__text"><span class="ui-tg__label">Shorten a lock</span><span class="ui-tg__sub">Dates only move later</span></span><button class="ui-switch" type="button" role="switch" aria-checked="false" aria-label="Shorten a lock" disabled><i></i></button></li>
-                    <li class="ui-tg"><span class="ui-tg__text"><span class="ui-tg__label">Set the fee</span><span class="ui-tg__sub">Never above 1 HYPE</span></span><button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Set the fee" disabled><i></i></button></li>
-                    <li class="ui-tg"><span class="ui-tg__text"><span class="ui-tg__label">Choose the fee wallet</span><span class="ui-tg__sub">Where the HYPE fees go</span></span><button class="ui-switch is-on" type="button" role="switch" aria-checked="true" aria-label="Choose the fee wallet" disabled><i></i></button></li>
-                  </ul>
-                </div>
-              </div></div>
-            </div>
-          </article>
-        </div>
-      </div>
-      <div class="grid">
-        <article class="card card--row span-6 m-nolift">
-          <h3>Seals liquidity for good</h3>
-          <p>A permanent lock never opens. Owners can also push a timed lock later, or hand it to another wallet.</p>
-          <div class="panel panel--flush" role="img" aria-label="Notifications: lock 12 made permanent, lock 9 extended, lock 2 received" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="37" data-fx-params='{"speed":0,"tint":0.6,"grainMotion":0}'>
-            <div class="stage stage--fade-b"><div class="at-rise fit" style="--fit-max:380px;--ax:32px;--ay:calc(100% - 180px);--ay-sm:calc(100% - 180px)">
-              <div class="ui ui-notify" data-ui="notify">
-                <ul class="ui-notify__list" data-notify-list>
-                  <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="4">LP</span><span class="ui-note__text"><span class="ui-note__title">Lock #12 is permanent<time>now</time></span><span class="ui-note__body">250,000 LP tokens, never withdrawable</span></span></li>
-                  <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="1">$</span><span class="ui-note__text"><span class="ui-note__title">Lock #9 extended<time>2d</time></span><span class="ui-note__body">Now opens on 21 Dec 2026</span></span></li>
-                  <li class="ui-note"><span class="ui-avatar ui-note__av" data-tone="3">W</span><span class="ui-note__text"><span class="ui-note__title">Lock #2 received<time>5d</time></span><span class="ui-note__body">Sent to you by 0x9b21…e4c0</span></span></li>
-                </ul>
-              </div>
-            </div></div>
-          </div>
-        </article>
-        <article class="card card--row span-6 m-nolift">
-          <h3>Ships with 49 tests</h3>
-          <p>Unit, fuzz and invariant tests cover every function. Once deployed, a script compares the chain&rsquo;s bytecode to this source.</p>
-          <div class="panel panel--flush" role="img" aria-label="A terminal running npm test: 49 tests passing" data-fx="grain-gradient" data-fx-palette='{"bg":"#05161a","surface":"#0f3238","ink":"#e9f2f2","muted":"#93aeb1","accent":"#ff7a3d","accentInk":"#05161a"}' data-fx-seed="41" data-fx-params='{"speed":0,"tint":0.5,"grainMotion":0}'>
-            <div class="stage stage--fade-b"><div class="at-rise to-edge" style="--w:420px;--ax:max(24px, 50% - 210px);--ay:40px">
-              <div class="ui ui-panel ui-term" data-ui="terminal-run">
-                <div class="ui-term__head"><span class="ui-term__title">elysian-pyre</span><span class="ui-meta">zsh</span><span class="ui-spacer"></span><span class="ui-chip ui-chip--plain ui-term__branch">main</span></div>
-                <div class="ui-term__screen" data-term-screen>
-                  <div class="ui-term__track" data-term-track>
-                    <div class="ui-term__ln ui-term__cmd"><span class="ui-term__cwd">~/elysian-pyre</span><span class="ui-term__sig">$</span><span class="ui-term__typed" data-term-cmd>npm test</span></div>
-                    <div class="ui-term__ln ui-term__meter" data-term-out data-term-meter><span class="ui-term__bar" style="--p:1"><i></i></span><span class="ui-term__count" data-term-count>2 of 2 files</span></div>
-                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">ElysianPyre.t.sol</span><span class="ui-term__n">46 tests</span><span class="ui-term__t">fuzz 1000</span></div>
-                    <div class="ui-term__ln ui-term__log" data-term-out data-term-step><svg class="ui-term__tick" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 8.4 2.8 2.8 6.2-6.4"/></svg><span class="ui-term__path">ElysianPyre.invariant.t.sol</span><span class="ui-term__n">3 invariants</span><span class="ui-term__t">runs 1000</span></div>
-                    <div class="ui-term__ln ui-term__gap" data-term-out aria-hidden="true"></div>
-                    <div class="ui-term__ln ui-term__sum" data-term-out><span class="ui-term__key">Tests</span><span class="ui-term__val">49 passing</span><span class="ui-term__dim">(49)</span></div>
-                    <div class="ui-term__ln ui-term__done" data-term-out data-term-done><span class="ui-term__ok"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 8.3 2.4 2.4 4.6-5"/></svg></span><b>Done</b><span class="ui-term__dim">no failures</span></div>
-                  </div>
-                </div>
-              </div>
-            </div></div>
-          </div>
-        </article>
-      </div>
-    </div>
+  <section class="panel chapter mid" data-in="0.635" data-out="0.735">
+    <span class="eyebrow">04 / Brûler</span>
+    <h2>Ce qui entre dans le feu<br />n'en ressort pas.</h2>
+    <p>Elysian Pyre appelle la fonction burn du token : sa supply baisse vraiment. Sans burn, les tokens partent à l'adresse morte. Chaque burn est compté.</p>
   </section>
 
-  <section class="section ground-surface" id="burn" aria-labelledby="burn-h">
-    <div class="wrap">
-      <div class="grid">
-        <div class="span-6 stack-5">
-          <h2 id="burn-h">Burns that lower the total supply</h2>
-          <p class="t-lead">Elysian Pyre calls the token&rsquo;s own burn function, so the supply really goes down. A token without one has its tokens sent to the dead address.</p>
-          <p>Every burn is counted per token, and the contract never keeps a single burned token.</p>
-          <a class="link" href="https://github.com/Paquito-gif/Lock">Read the contract</a>
-        </div>
-        <div class="frame frame--split span-6 start-7" data-visual>
-          <div class="dg" data-diagram><script type="application/json">{"layout":"lanes","alt":"Tokens from your wallet go to Elysian Pyre, which calls the token's burn function to lower its supply, or sends them to the dead address, and records the total.","input":{"label":"Wallet","icon":"ui:wallet","sub":"500,000 tokens"},"core":{"label":"Elysian Pyre","icon":"ui:flame"},"lanes":[{"label":"Supply lowered","icon":"ui:trending-down","done":true,"sub":"token burn()"},{"label":"Or sent to dead","icon":"ui:circle-off","done":true,"sub":"0x…dEaD"},{"label":"Total recorded","icon":"ui:sigma","done":true,"sub":"totalBurned"}]}</script></div>
-        </div>
-      </div>
-      <div class="mo-host" data-moment="marquee-row" data-moment-opts='{"speed": 32}'>
-        <ul class="mo-mq__track"><li>Liquidity pools</li><li>Team allocations</li><li>Treasury reserves</li><li>Presale supply</li><li>Advisor tokens</li><li>Grant payments</li><li>Unsold supply</li><li>Airdrop reserves</li></ul>
-      </div>
-    </div>
+  <section class="panel rituals" data-in="0.765" data-out="0.85">
+    <h2 class="section-title">Trois rituels</h2>
+    <div class="cards" id="ritualCards"></div>
+    <p class="formula">supply après le burn = supply avant − montant brûlé</p>
   </section>
 
-  <section class="section" id="faq" aria-labelledby="faq-h">
-    <div class="wrap">
-      <div class="grid">
-        <div class="span-6 stack-4">
-          <h2 id="faq-h">Questions</h2>
-          <p class="muted">The contract is public, so every answer here can be checked in its source.</p>
-          <a class="link" href="https://github.com/Paquito-gif/Lock/issues">Ask on GitHub</a>
-          <div class="faq-code" role="img" aria-label="The Elysian Pyre contract source: the fee cap of 1 HYPE and the withdraw function that checks the owner and the unlock date">
-            <div class="ui ui-panel ui-code" data-ui="code">
-              <div class="ui-code__tabs">
-                <span class="ui-code__tab is-on"><i class="ui-code__lang">SOL</i>ElysianPyre.sol</span>
-                <span class="ui-spacer"></span>
-                <span class="ui-chip ui-chip--plain ui-code__chip">MIT</span>
-              </div>
-              <pre class="ui-code__pre"><code><span class="ui-code__ln is-mark" data-n="30"><span class="k">uint256 constant</span> MAX_FEE = <span class="n">1</span> ether;</span>
-<span class="ui-code__ln" data-n="118"><span class="k">function</span> <span class="f">withdraw</span>(uint256 id) <span class="k">external</span> {</span>
-<span class="ui-code__ln" data-n="119">Lock <span class="k">storage</span> l = <span class="f">_getLock</span>(id);</span>
-<span class="ui-code__ln" data-n="120"><span class="k">if</span> (msg.sender != l.owner)</span>
-<span class="ui-code__ln" data-n="">  <span class="k">revert</span> <span class="f">NotLockOwner</span>();</span>
-<span class="ui-code__ln" data-n="122"><span class="k">if</span> (l.unlockTime == PERMANENT)</span>
-<span class="ui-code__ln" data-n="">  <span class="k">revert</span> <span class="f">StillLocked</span>(l.unlockTime);</span></code></pre>
-              <div class="ui-code__hint"><span class="ui-dot"></span><span>The fee cap is a constant: no update can raise it.</span></div>
-            </div>
-          </div>
+  <section class="panel finale" data-in="0.935" data-out="9" id="entrer">
+    <div class="stack">
+      <div class="join">
+        <span class="eyebrow">05 / Passer la porte</span>
+        <h2>Verrouillez vos tokens.</h2>
+        <div class="status"><span>Contrat sur Elysium, chaîne 99901</span><em>Aperçu</em></div>
+        <div class="row">
+          <div class="kv"><span>Frais</span><b>0,1 HYPE</b></div>
+          <div class="kv"><span>Plafond</span><b>1 HYPE</b></div>
+          <div class="kv"><span>Tests</span><b>49</b></div>
         </div>
-        <div class="faq span-6 start-7">
-          <div class="faq__item"><h3>What does a lock or a burn cost?</h3><p>0.1 HYPE per lock or burn, plus gas. The fee can never go above 1 HYPE: that cap is written into the contract.</p></div>
-          <div class="faq__item"><h3>Can anyone else withdraw my tokens?</h3><p>No. Only the lock&rsquo;s owner can withdraw, and only after the unlock date. The admin has no function that moves tokens.</p></div>
-          <div class="faq__item"><h3>What happens to a permanent lock?</h3><p>The tokens stay in the contract for good. Nobody, the owner included, can ever withdraw them.</p></div>
-          <div class="faq__item"><h3>Is the Elysian Pyre contract audited?</h3><p>Not yet, and it is not deployed yet either. The source is public with 49 tests; once it is live, anyone can check its bytecode against this source.</p></div>
-        </div>
+        <a class="primary" href="app.html">Ouvrir l'app</a>
+        <p class="hint">Le contrat n'est pas encore déployé : l'app tourne en aperçu et rien ne peut être signé.</p>
+        <div class="links"><button data-sheet="questions">Questions</button><i></i><button data-sheet="contrat">Contrat</button><i></i><a href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">GitHub</a></div>
       </div>
     </div>
   </section>
 </main>
 
-<footer class="footer closing footer--dark ground-inverse" id="contact" aria-labelledby="close-h">
-  <div class="wrap">
-    <div class="closing__cta close--word">
-      <div class="section-head--split">
-        <div><h2 id="close-h">Lock tokens on Elysium</h2><p class="t-lead">Connect a wallet, pick a token and a date, sign once. 0.1 HYPE per lock, once the contract is live.</p></div>
-        <a class="btn btn--primary" href="app.html">Try the app<svg class="m-arrow" viewBox="0 0 12 12" aria-hidden="true"><path class="m-arrow__stem" d="M1 6h8"/><path class="m-arrow__head" d="M4.5 2.5 8 6l-3.5 3.5"/></svg></a>
-      </div>
-      <p class="close__word" aria-hidden="true">Elysian Pyre</p>
-    </div>
-    <div class="closing__links">
-      <div class="grid">
-        <div class="span-4 stack-4">
-          <p class="footer__lede">Token locks and burns on Elysium.</p>
-        </div>
-        <div class="span-2 footer__col"><h4>Locks</h4><ul><li><a href="#locks">My locks</a></li><li><a href="#guarantees">Lock types</a></li></ul></div>
-        <div class="span-2 footer__col"><h4>Contract</h4><ul><li><a href="#guarantees">Guarantees</a></li><li><a href="https://github.com/Paquito-gif/Lock">Source code</a></li></ul></div>
-        <div class="span-2 footer__col"><h4>Burn</h4><ul><li><a href="#burn">How burns work</a></li></ul></div>
-        <div class="span-2 footer__col"><h4>Questions</h4><ul><li><a href="#faq">Answers</a></li><li><a href="https://github.com/Paquito-gif/Lock/issues">Issues</a></li></ul></div>
-      </div>
-      <div class="footer__legal">
-        <span>&copy; 2026 Elysian Pyre</span>
-        <div class="socials"></div>
-      </div>
-    </div>
+<div class="track"></div>
+
+<footer class="dock">
+  <div class="glass">
+    <span>Contrat</span>
+    <code>Pas encore déployé</code>
+    <a class="go" href="app.html">Ouvrir l'app</a>
   </div>
 </footer>
-<script type="module" src="assets/system.js"></script>
-<script type="module" src="assets/motion/motion.js"></script>
-<script type="module" src="assets/layout/layout.js"></script>
-<script type="module" src="assets/diagrams/mount.js"></script>
+<button class="glass icon-btn sound" aria-label="Activer le son" aria-pressed="false">
+  <svg class="off" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M7 4l13 8-13 8z"/></svg>
+  <svg class="on" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="4" y="8" width="2.4" height="8" fill="currentColor"/><rect x="8.6" y="4" width="2.4" height="16" fill="currentColor"/><rect x="13.2" y="9" width="2.4" height="6" fill="currentColor"/><rect x="17.8" y="6" width="2.4" height="12" fill="currentColor"/></svg>
+</button>
+
+<div class="sheet" id="sheet" hidden role="dialog" aria-modal="true" aria-label="Questions et contrat">
+  <div class="sheet-bar">
+    <span class="brand" aria-hidden="true"><b>ELYSIAN <em>PYRE</em></b></span>
+    <nav class="glass seg" role="tablist">
+      <button role="tab" data-pane="questions">Questions</button>
+      <button role="tab" data-pane="contrat">Contrat</button>
+    </nav>
+    <button class="close" id="sheetClose" aria-label="Fermer">×</button>
+  </div>
+  <div class="sheet-body" id="sheetBody"></div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<template id="pane-questions">
+  <div class="sheet-inner">
+    <h2>Questions</h2>
+    <div class="qa">
+      <article><h3>Combien ça coûte ?</h3><p>0,1 HYPE par lock ou par burn, plus le gas. Les frais ne peuvent jamais dépasser 1 HYPE : ce plafond est écrit dans le contrat.</p></article>
+      <article><h3>Quelqu'un d'autre peut-il retirer mes tokens ?</h3><p>Non. Seul le propriétaire du lock peut retirer, et seulement après la date de déblocage. L'admin n'a aucune fonction qui déplace des tokens.</p></article>
+      <article><h3>Que devient un lock permanent ?</h3><p>Les tokens restent dans le contrat pour toujours. Personne, le propriétaire compris, ne peut les retirer.</p></article>
+      <article><h3>Un burn baisse-t-il vraiment la supply ?</h3><p>Oui si le token a une fonction burn. Sinon les tokens partent à l'adresse morte 0x…dEaD et ne peuvent plus bouger.</p></article>
+      <article><h3>Quels tokens sont acceptés ?</h3><p>Les ERC-20 standard sur Elysium. Les tokens à taxe de transfert sont refusés pour les locks, et les tokens rebasing ne sont pas pris en charge.</p></article>
+      <article><h3>Le contrat est-il audité ?</h3><p>Pas encore, et il n'est pas encore déployé. Son code est public avec 49 tests ; une fois en ligne, chacun pourra comparer le bytecode à ce code.</p></article>
+    </div>
+  </div>
+</template>
+<template id="pane-contrat">
+  <div class="sheet-inner">
+    <h2>Le contrat</h2>
+    <div class="guarantees">
+      <div><b>Pas de pause</b><span>Rien ne peut bloquer un retrait une fois la date passée.</span></div>
+      <div><b>Jamais raccourci</b><span>Une date de déblocage ne peut que reculer, jusqu'à « jamais ».</span></div>
+      <div><b>Frais plafonnés</b><span>1 HYPE au maximum, une constante que l'admin ne peut pas changer.</span></div>
+      <div><b>Rien ne reste après un burn</b><span>Burn du token, sinon adresse morte. Le total brûlé est enregistré par token.</span></div>
+    </div>
+<pre class="code"><span class="k">uint256 public constant</span> MAX_FEE = <span class="n">1</span> ether;
+
+<span class="k">function</span> <span class="f">withdraw</span>(uint256 id) <span class="k">external</span> nonReentrant {
+    Lock <span class="k">storage</span> l = <span class="f">_getLock</span>(id);
+    <span class="k">if</span> (msg.sender != l.owner) <span class="k">revert</span> <span class="f">NotLockOwner</span>();
+    <span class="k">if</span> (l.withdrawn) <span class="k">revert</span> <span class="f">AlreadyWithdrawn</span>();
+    <span class="c">// un lock permanent ne s'ouvre jamais</span>
+    <span class="k">if</span> (l.unlockTime == PERMANENT || block.timestamp &lt; l.unlockTime)
+        <span class="k">revert</span> <span class="f">StillLocked</span>(l.unlockTime);
+    ...
+}</pre>
+    <a class="ghost-btn" href="https://github.com/Paquito-gif/Lock" target="_blank" rel="noopener">Lire le code sur GitHub <span aria-hidden="true">→</span></a>
+  </div>
+</template>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* =========================================================
+   CONFIG
+   ========================================================= */
+const CONFIG = {
+  rituals: [
+    { name: 'Verrouiller', tag: 'Lock', color: '#ff8a3d', mode: 'lock', opens: 'À votre date', back: 'Oui, par vous', draw: 'lock' },
+    { name: 'Sceller', tag: 'Lock forever', color: '#ffd27a', mode: 'forever', opens: 'Jamais', back: 'Non', draw: 'seal' },
+    { name: 'Brûler', tag: 'Burn', color: '#ff5a3a', mode: 'burn', opens: 'Jamais', back: 'Détruits', draw: 'flame' },
+  ],
+  bootSteps: [[0, 'Allumage'], [0.3, 'Forge du cadenas'], [0.65, 'Chauffe du bûcher'], [0.95, 'Prêt']],
+};
+
+/* ---------- utilitaires ---------- */
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const sm = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const rand = (a, b) => a + Math.random() * (b - a);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const mobile = matchMedia('(max-width: 760px)').matches;
+const frame = () => new Promise((r) => requestAnimationFrame(r));
+function seeded(seed) { return () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// Piste d'animation : [[p, valeur], ...] interpolée en douceur (nombres ou couleurs)
+class Track {
+  constructor(keys) {
+    this.k = keys.map(([p, v]) => [p, typeof v === 'string' ? new THREE.Color(v) : v]);
+    this.color = this.k[0][1] instanceof THREE.Color;
+    this.out = this.color ? new THREE.Color() : 0;
+  }
+  at(p) {
+    const k = this.k;
+    let i = 1;
+    while (i < k.length - 1 && p > k[i][0]) i++;
+    const [p0, v0] = k[i - 1], [p1, v1] = k[i];
+    const t = sm(p0, p1, p);
+    return this.color ? this.out.copy(v0).lerp(v1, t) : v0 + (v1 - v0) * t;
+  }
+}
+
+/* ---------- loader ---------- */
+const boot = document.querySelector('.boot');
+const bootPct = boot.querySelector('.pct');
+const bootMsg = boot.querySelector('.msg');
+function setBoot(f) {
+  boot.style.setProperty('--load', f);
+  bootPct.textContent = `${Math.round(f * 100)}%`;
+  for (const [at, msg] of CONFIG.bootSteps) if (f >= at) bootMsg.textContent = msg;
+}
+setBoot(0.04);
+await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 2500))]);
+setBoot(0.22);
+await frame();
+
+/* ---------- textures procédurales ---------- */
+function glowTexture(size = 128) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); const r = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.25, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function smokeTexture(seed, size = 128) {
+  const rnd = seeded(seed * 977);
+  const N = 32, grid = Array.from({ length: N * N }, rnd);
+  const noise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+    const v = (a, b) => grid[((a % N) + N) % N + (((b % N) + N) % N) * N];
+    const u = xf * xf * (3 - 2 * xf), w = yf * yf * (3 - 2 * yf);
+    return (v(xi, yi) * (1 - u) + v(xi + 1, yi) * u) * (1 - w) + (v(xi, yi + 1) * (1 - u) + v(xi + 1, yi + 1) * u) * w;
+  };
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'); const img = g.createImageData(size, size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    let f = 0, a = 0.5, s = 4 / size;
+    for (let o = 0; o < 5; o++) { f += a * noise(x * s + seed * 7, y * s + seed * 3); a *= 0.5; s *= 2; }
+    const dx = x / size - 0.5, dy = y / size - 0.5;
+    const fall = clamp(1 - Math.sqrt(dx * dx + dy * dy) * 2.1);
+    const d = clamp((f - 0.38) * 2.2) * fall * fall;
+    const i = (y * size + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = d * 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// vignette d'un rituel : cadenas, sceau ou flamme, dessinés au canevas
+function ritualPortrait(kind, color, w = 440, h = 300) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 0, h);
+  bg.addColorStop(0, '#120708'); bg.addColorStop(1, '#2a0d07'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const rnd = seeded(kind.length * 97);
+  for (let i = 0; i < 70; i++) { g.fillStyle = `rgba(255,${150 + rnd() * 80 | 0},90,${rnd() * 0.7})`; g.fillRect(rnd() * w, rnd() * h, 1.5, 1.5); }
+  const cx = w / 2, cy = h * 0.56;
+  const halo = g.createRadialGradient(cx, cy, 0, cx, cy, h * 0.6);
+  halo.addColorStop(0, color + 'cc'); halo.addColorStop(0.35, color + '44'); halo.addColorStop(1, 'transparent');
+  g.fillStyle = halo; g.fillRect(0, 0, w, h);
+  g.shadowColor = color; g.shadowBlur = 28; g.lineCap = 'round';
+  const lock = (x, y, s, open) => {
+    g.strokeStyle = '#fff1dc'; g.lineWidth = s * 0.16;
+    g.beginPath(); g.arc(x, y - s * 0.55 - (open ? s * 0.35 : 0), s * 0.42, Math.PI, 0); g.lineTo(x + s * 0.42, y - s * 0.2); g.moveTo(x - s * 0.42, y - s * 0.55 - (open ? s * 0.35 : 0)); g.lineTo(x - s * 0.42, y - s * 0.2); g.stroke();
+    const body = g.createLinearGradient(0, y - s * 0.3, 0, y + s * 0.6);
+    body.addColorStop(0, '#fff3dd'); body.addColorStop(1, color);
+    g.fillStyle = body; g.beginPath(); g.roundRect(x - s * 0.62, y - s * 0.3, s * 1.24, s * 0.95, s * 0.14); g.fill();
+    g.shadowBlur = 0; g.fillStyle = '#2a0d07'; g.beginPath(); g.arc(x, y + s * 0.08, s * 0.1, 0, Math.PI * 2); g.fill(); g.fillRect(x - s * 0.04, y + s * 0.1, s * 0.08, s * 0.22); g.shadowBlur = 28;
+  };
+  if (kind === 'lock') {
+    lock(cx, cy, h * 0.42, false);
+    g.font = `500 ${h * 0.07}px JetBrains Mono, monospace`; g.fillStyle = '#ffe2c8'; g.textAlign = 'center'; g.shadowBlur = 10;
+    g.fillText('21 · 12 · 2026', cx, h * 0.93);
+  } else if (kind === 'seal') {
+    g.strokeStyle = color; g.lineWidth = 9;
+    for (let i = -3; i <= 3; i++) { g.beginPath(); g.ellipse(cx + i * 46, cy - h * 0.05, 22, 12, 0, 0, Math.PI * 2); g.stroke(); }
+    lock(cx, cy, h * 0.42, false);
+  } else {
+    const flame = (x, y, s, col) => {
+      const fg = g.createLinearGradient(0, y - s, 0, y);
+      fg.addColorStop(0, 'rgba(255,240,200,0)'); fg.addColorStop(0.4, col); fg.addColorStop(1, '#fff3cf');
+      g.fillStyle = fg; g.beginPath(); g.moveTo(x, y - s);
+      g.bezierCurveTo(x + s * 0.55, y - s * 0.45, x + s * 0.5, y, x, y);
+      g.bezierCurveTo(x - s * 0.5, y, x - s * 0.55, y - s * 0.45, x, y - s); g.fill();
+    };
+    flame(cx, h * 0.86, h * 0.72, color); flame(cx - 46, h * 0.88, h * 0.42, '#ff8a3d'); flame(cx + 52, h * 0.88, h * 0.48, '#ffd27a');
+    g.fillStyle = '#ffd27a'; g.shadowBlur = 16;
+    for (let i = 0; i < 4; i++) { g.beginPath(); g.ellipse(cx - 90 + i * 60, h * 0.2 + (i % 2) * 26, 14, 5, 0.4, 0, Math.PI * 2); g.fill(); }
+  }
+  return c.toDataURL('image/webp', 0.88);
+}
+
+const GLOW = glowTexture();
+const SMOKE = [1, 2, 3].map((s) => smokeTexture(s));
+setBoot(0.45);
+await frame();
+
+/* =========================================================
+   SCÈNE three.js
+   ========================================================= */
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? 1.5 : 1.75));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2('#140808', 0.012);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 2000);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.6, 0.55, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const pointScale = () => innerHeight * renderer.getPixelRatio() * 0.5;
+
+const GATE_Z = -60, PYRE = new THREE.Vector3(0, 0, -36);
+
+/* ---------- pistes (tout ce qui change avec le scroll) ---------- */
+const T = {
+  skyTop: new Track([[0, '#030206'], [0.45, '#06030a'], [0.7, '#0b0406'], [0.86, '#05080c'], [0.95, '#0b3a3c'], [1, '#0e4a4a']]),
+  skyMid: new Track([[0, '#2a0b07'], [0.3, '#3a1008'], [0.6, '#4a1608'], [0.72, '#5a1c08'], [0.86, '#1c2a2e'], [0.95, '#3f9e94'], [1, '#4fb2a6']]),
+  skyBot: new Track([[0, '#0a0405'], [0.86, '#071012'], [0.95, '#0d2c2e'], [1, '#123a3a']]),
+  embers: new Track([[0, 0.7], [0.5, 1], [0.72, 1], [0.9, 0.5], [1, 0.15]]),
+  fog: new Track([[0, '#140806'], [0.3, '#1a0906'], [0.62, '#220b05'], [0.75, '#1a0906'], [0.86, '#0c1818'], [0.95, '#14403d'], [1, '#103734']]),
+  fogD: new Track([[0, 0.0065], [0.15, 0.009], [0.3, 0.01], [0.62, 0.011], [0.86, 0.009], [0.95, 0.011], [1, 0.009]]),
+  bloom: new Track([[0, 0.55], [0.27, 0.7], [0.34, 0.75], [0.5, 0.5], [0.68, 0.7], [0.84, 0.55], [0.93, 0.8], [1, 0.6]]),
+  heat: new Track([[0, 0.25], [0.14, 0.5], [0.24, 0.75], [0.29, 1.15], [0.36, 1.0], [0.46, 0.55], [0.82, 0.5], [0.86, 0.2], [1, 0]]),
+  pyre: new Track([[0, 0.75], [0.55, 0.9], [0.63, 1.2], [0.7, 1.45], [0.76, 1.1], [0.9, 0.8], [1, 0.6]]),
+  coins: new Track([[0, 0], [0.6, 0], [0.64, 1], [0.73, 1], [0.77, 0]]),
+  open: new Track([[0, 0], [0.865, 0], [0.935, 1], [1, 1]]),
+  unlock: new Track([[0, 0], [0.84, 0], [0.87, 1], [1, 1]]),
+  elys: new Track([[0, 0], [0.84, 0.05], [0.9, 0.75], [0.95, 1], [1, 1]]),
+  fov: new Track([[0, 46], [0.22, 42], [0.5, 54], [0.68, 48], [0.92, 58], [1, 50]]),
+};
+
+/* ---------- ciel ---------- */
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uTop: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uBot: { value: new THREE.Color() }, uTime: { value: 0 }, uStars: { value: 1 } },
+  vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `
+    uniform vec3 uTop, uMid, uBot; uniform float uTime, uStars; varying vec3 vDir;
+    float h21(vec2 p){ return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5); }
+    void main(){
+      vec3 d = normalize(vDir); float h = d.y;
+      vec3 col = h > 0. ? mix(uMid, uTop, pow(clamp(h,0.,1.), .45)) : mix(uMid, uBot, pow(clamp(-h,0.,1.), .3));
+      vec2 g = vec2(atan(d.z, d.x) * 120., h * 160.); vec2 id = floor(g);
+      float s = step(.993, h21(id)) * smoothstep(.05, .4, h) * (.5 + .5 * sin(uTime * (1. + h21(id + 3.) * 3.) + h21(id) * 60.));
+      col += vec3(1., .9, .8) * s * uStars * .8;
+      gl_FragColor = vec4(col, 1.);
+    }`,
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), skyMat);
+scene.add(sky);
+
+/* ---------- sol de basalte, fissuré de braise ---------- */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(700, 700, 1, 1).rotateX(-Math.PI / 2),
+  new THREE.ShaderMaterial({
+    fog: false,
+    uniforms: { uTime: { value: 0 }, uHeat: { value: 0.5 }, uPyre: { value: 1 }, uFog: { value: new THREE.Color() }, uFogD: { value: 0.012 }, uElys: { value: 0 } },
+    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uTime, uHeat, uPyre, uFogD, uElys; uniform vec3 uFog; varying vec3 vW;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3. - 2. * f);
+        return mix(mix(h(i), h(i + vec2(1, 0)), u.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), u.x), u.y); }
+      float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * n(p); p *= 2.03; a *= .5; } return s; }
+      void main(){
+        vec2 p = vW.xz * .16;
+        float f = fbm(p);
+        float c1 = 1. - smoothstep(0., .03, abs(f - .5));
+        float c2 = 1. - smoothstep(0., .02, abs(fbm(p * 2.3 + 7.) - .5));
+        float near = exp(-length(vW.xz - vec2(0., -36.)) * .055) * uPyre + exp(-length(vW.xz - vec2(0., -60.)) * .045) * uHeat;
+        float beyond = smoothstep(-61., -66., vW.z);
+        float heat = (c1 * .7 + c2 * .25) * (.035 + near * .5) * (1. - beyond);
+        vec3 base = mix(vec3(.03, .022, .024), vec3(.07, .05, .052), fbm(p * 4.));
+        base = mix(base, vec3(.03, .07, .07), beyond * uElys);
+        vec3 col = base + vec3(1., .36, .08) * heat * (.65 + .35 * sin(uTime * 1.3 + f * 20.));
+        col += vec3(.45, .95, .88) * beyond * uElys * (c1 * .25 + .04);
+        float fg = 1. - exp(-pow(length(cameraPosition - vW) * uFogD, 2.)); col = mix(col, uFog, fg);
+        gl_FragColor = vec4(col, 1.);
+      }`,
+  }),
+);
+ground.position.z = GATE_Z;
+scene.add(ground);
+
+/* ---------- lumières ---------- */
+const hemi = new THREE.HemisphereLight('#6a7c86', '#2a0d07', 0.55); scene.add(hemi);
+const moon = new THREE.DirectionalLight('#9fb8c4', 0.9); moon.position.set(-40, 80, 30); scene.add(moon);
+const pyreLight = new THREE.PointLight('#ff7a2a', 140, 90, 1.7); pyreLight.position.set(0, 5, PYRE.z); scene.add(pyreLight);
+const brazierLights = [-1, 1].map((s) => { const l = new THREE.PointLight('#ff8a3d', 90, 40, 1.8); l.position.set(s * 10, 7, -50); scene.add(l); return l; });
+const elysLight = new THREE.PointLight('#8fe8dc', 0, 120, 1.4); elysLight.position.set(0, 12, GATE_Z - 8); scene.add(elysLight);
+
+/* ---------- le rempart et la porte ---------- */
+const stone = new THREE.MeshStandardMaterial({ color: '#2a2224', roughness: 0.92, metalness: 0.05 });
+const stoneDark = new THREE.MeshStandardMaterial({ color: '#1a1416', roughness: 0.95 });
+const iron = new THREE.MeshStandardMaterial({ color: '#3a2c28', roughness: 0.42, metalness: 0.75, emissive: new THREE.Color('#ff4a12'), emissiveIntensity: 0.05 });
+const box = (w, hgt, d, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), mat); m.position.set(x, y, z); scene.add(m); return m; };
+[-1, 1].forEach((s) => {
+  box(6, 32, 7, stone, s * 11, 16, GATE_Z);              // pilier
+  box(8, 2, 9, stoneDark, s * 11, 33, GATE_Z);           // chapiteau
+  box(8, 2.4, 9, stoneDark, s * 11, 1.2, GATE_Z);        // socle
+  box(48, 20, 5, stoneDark, s * 38, 10, GATE_Z - 0.5);   // rempart
+  box(48, 1.6, 6, stone, s * 38, 20.6, GATE_Z - 0.5);
+  for (let i = 0; i < 9; i++) box(2.6, 2.4, 6, stone, s * (17 + i * 5.2), 22.6, GATE_Z - 0.5); // créneaux
+});
+box(30, 4, 8, stone, 0, 31, GATE_Z);                     // linteau
+const arch = new THREE.Mesh(new THREE.TorusGeometry(8, 0.9, 12, 48, Math.PI), stoneDark);
+arch.position.set(0, 22, GATE_Z + 3.6); scene.add(arch);
+// la lumière d'Elysium, derrière les battants
+const elysMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, fog: false,
+  uniforms: { uOpen: { value: 0 }, uTime: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
+  fragmentShader: `uniform float uOpen, uTime; varying vec2 vUv;
+    void main(){ vec2 q = vUv - vec2(.5, .35); float r = length(q * vec2(1., .8));
+      vec3 c = mix(vec3(1.), vec3(.56, .91, .86), smoothstep(0., .5, r));
+      float rays = .75 + .25 * sin(atan(q.y, q.x) * 14. + uTime * .3);
+      gl_FragColor = vec4(c * (1.05 + rays * .35), uOpen * (1. - smoothstep(.35, .75, r) * .6)); }`,
+});
+const elysPlane = new THREE.Mesh(new THREE.PlaneGeometry(16, 22), elysMat);
+elysPlane.position.set(0, 11, GATE_Z - 1.2); scene.add(elysPlane);
+const elysGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color('#8fe8dc').multiplyScalar(1.6), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+elysGlow.scale.set(70, 50, 1); elysGlow.position.set(0, 12, GATE_Z - 30); scene.add(elysGlow);
+
+// les deux battants, chacun tourne autour de son gond
+function makeDoor(side) {
+  const g = new THREE.Group(); g.position.set(side * 8, 0, GATE_Z);
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(8, 22, 1.2), iron); leaf.position.set(-side * 4, 11, 0); g.add(leaf);
+  const band = new THREE.MeshStandardMaterial({ color: '#241a18', roughness: 0.5, metalness: 0.8 });
+  [3, 8.5, 14, 19.5].forEach((y) => { const b = new THREE.Mesh(new THREE.BoxGeometry(8, 0.6, 0.3), band); b.position.set(-side * 4, y, 0.72); g.add(b); });
+  const studs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 8, 6), band, 4 * 8);
+  const d = new THREE.Object3D(); let k = 0;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 8; j++) { d.position.set(-side * (1.2 + i * 1.9), 1.6 + j * 2.7, 0.75); d.updateMatrix(); studs.setMatrixAt(k++, d.matrix); }
+  g.add(studs);
+  scene.add(g); return g;
+}
+const doors = [makeDoor(-1), makeDoor(1)];
+
+/* ---------- les chaînes en X et le cadenas ---------- */
+const chainMat = new THREE.MeshStandardMaterial({ color: '#6a5a50', roughness: 0.35, metalness: 0.95, emissive: new THREE.Color('#ff5a1a'), emissiveIntensity: 0.1, transparent: true });
+const chainLines = [[[-7.4, 20.5], [7.4, 2.5]], [[7.4, 20.5], [-7.4, 2.5]]];
+const links = [];
+for (const [[x0, y0], [x1, y1]] of chainLines) {
+  const a = new THREE.Vector3(x0, y0, GATE_Z + 1.1), b = new THREE.Vector3(x1, y1, GATE_Z + 1.1);
+  const dir = b.clone().sub(a); const len = dir.length(); dir.normalize();
+  const n = Math.floor(len / 0.62);
+  for (let i = 0; i <= n; i++) links.push({ p: a.clone().addScaledVector(dir, i * 0.62), dir, twist: i % 2 });
+}
+const chain = new THREE.InstancedMesh(new THREE.TorusGeometry(0.34, 0.09, 6, 14), chainMat, links.length);
+{
+  const d = new THREE.Object3D(); const X = new THREE.Vector3(1, 0, 0);
+  links.forEach((l, i) => {
+    d.position.copy(l.p); d.quaternion.setFromUnitVectors(X, l.dir);
+    if (l.twist) d.rotateX(Math.PI / 2);
+    d.scale.set(1.45, 1, 1); d.updateMatrix(); chain.setMatrixAt(i, d.matrix);
+  });
+}
+scene.add(chain);
+
+const lockMat = new THREE.MeshStandardMaterial({ color: '#5a4a40', roughness: 0.32, metalness: 0.95, emissive: new THREE.Color('#ff4a12'), emissiveIntensity: 0.1 });
+const padlock = new THREE.Group();
+const lockBody = new THREE.Mesh(new RoundedBoxGeometry(4.2, 3.6, 1.6, 4, 0.35), lockMat);
+const shackle = new THREE.Group();
+const shArc = new THREE.Mesh(new THREE.TorusGeometry(1.45, 0.34, 14, 40, Math.PI), lockMat); shArc.position.y = 2.6;
+const legGeo = new THREE.CylinderGeometry(0.34, 0.34, 1.5, 14);
+const legL = new THREE.Mesh(legGeo, lockMat); legL.position.set(-1.45, 1.85, 0);
+const legR = new THREE.Mesh(legGeo, lockMat); legR.position.set(1.45, 1.85, 0);
+shackle.add(shArc, legL, legR);
+const keyMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.4, 0.5) });
+const keyhole = new THREE.Group();
+const kh1 = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), keyMat); kh1.position.set(0, 0.15, 0.81);
+const kh2 = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.75), keyMat); kh2.position.set(0, -0.3, 0.81);
+keyhole.add(kh1, kh2);
+const lockHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color('#ff7a2a'), transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+lockHalo.scale.setScalar(7);
+padlock.add(lockBody, shackle, keyhole, lockHalo);
+const LOCK_HOME = new THREE.Vector3(0, 10.2, GATE_Z + 2.2);
+padlock.position.copy(LOCK_HOME);
+scene.add(padlock);
+
+/* ---------- le bûcher et les braseros ---------- */
+const bowl = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 2.4, 1.8, 40, 1, true), new THREE.MeshStandardMaterial({ color: '#2a1e1c', roughness: 0.5, metalness: 0.7, side: THREE.DoubleSide }));
+bowl.position.set(PYRE.x, 1.6, PYRE.z); scene.add(bowl);
+const rim = new THREE.Mesh(new THREE.TorusGeometry(3.4, 0.18, 10, 60), new THREE.MeshStandardMaterial({ color: '#3a2a22', metalness: 0.8, roughness: 0.4, emissive: new THREE.Color('#ff5a1a'), emissiveIntensity: 0.4 }));
+rim.rotation.x = Math.PI / 2; rim.position.set(PYRE.x, 2.5, PYRE.z); scene.add(rim);
+box(9, 0.8, 9, stoneDark, PYRE.x, 0.4, PYRE.z);
+box(7, 0.8, 7, stone, PYRE.x, 1.0, PYRE.z).rotation.y = Math.PI / 4;
+const embersBed = new THREE.Mesh(new THREE.CircleGeometry(3.2, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.9, 0.25) }));
+embersBed.position.set(PYRE.x, 2.2, PYRE.z); scene.add(embersBed);
+[-1, 1].forEach((s) => {
+  const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.4, 5, 16), stoneDark); ped.position.set(s * 10, 2.5, -50); scene.add(ped);
+  const cup = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 0.9, 0.9, 20, 1, true), new THREE.MeshStandardMaterial({ color: '#2a1e1c', metalness: 0.7, roughness: 0.5, side: THREE.DoubleSide }));
+  cup.position.set(s * 10, 5.4, -50); scene.add(cup);
+});
+
+// flammes : particules qui montent, du blanc au rouge sombre
+function makeFire({ at, spread, height, count, size }) {
+  const pos = new Float32Array(count * 3), seed = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random());
+    pos.set([Math.cos(a) * r * spread, 0, Math.sin(a) * r * spread], i * 3);
+    seed.set([Math.random(), Math.random(), Math.random(), Math.random()], i * 4);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aS', new THREE.BufferAttribute(seed, 4));
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uScale: { value: pointScale() }, uSize: { value: size }, uH: { value: height }, uAmt: { value: 1 } },
+    vertexShader: `attribute vec4 aS; uniform float uTime, uScale, uSize, uH, uAmt; varying float vK; varying float vS;
+      void main(){ float life = .7 + aS.x * .7; float k = fract(uTime / life + aS.y);
+        vec3 p = position; p.xz *= (1. - k * .9);
+        p.x += sin(uTime * 3.1 + aS.z * 20. + k * 5.) * .35 * k; p.z += cos(uTime * 2.7 + aS.w * 17.) * .25 * k;
+        p.y += k * uH * (.55 + aS.w * .6) * (.6 + .4 * uAmt);
+        vK = k; vS = aS.z;
+        vec4 mv = modelViewMatrix * vec4(p, 1.);
+        gl_PointSize = uSize * (1. - k * .65) * (.6 + aS.w) * (.7 + .3 * uAmt) * uScale / -mv.z;
+        gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float uAmt; varying float vK; varying float vS;
+      void main(){ float d = length(gl_PointCoord - .5);
+        vec3 c = mix(vec3(1., .82, .5), vec3(1., .42, .1), smoothstep(.0, .25, vK));
+        c = mix(c, vec3(.55, .08, .02), smoothstep(.3, .75, vK));
+        float a = pow(smoothstep(.5, 0., d), 1.6) * pow(1. - vK, 1.5) * smoothstep(0., .08, vK) * (.35 + .3 * uAmt) * .32;
+        gl_FragColor = vec4(c * 1.15, a); }`,
+  });
+  const pts = new THREE.Points(geo, mat); pts.position.copy(at); pts.frustumCulled = false; scene.add(pts); return pts;
+}
+const pyreFire = makeFire({ at: new THREE.Vector3(PYRE.x, 2.3, PYRE.z), spread: 2.4, height: 10, count: mobile ? 450 : 900, size: 2.0 });
+const brazierFires = [-1, 1].map((s) => makeFire({ at: new THREE.Vector3(s * 10, 5.6, -50), spread: 0.9, height: 4.5, count: mobile ? 140 : 260, size: 1.3 }));
+const doorFire = makeFire({ at: new THREE.Vector3(0, 0.2, GATE_Z + 1.8), spread: 7.5, height: 2.4, count: mobile ? 200 : 400, size: 0.8 });
+doorFire.geometry.attributes.position.array.forEach((v, i, arr) => { if (i % 3 === 2) arr[i] = v * 0.15; });
+doorFire.geometry.attributes.position.needsUpdate = true;
+
+// fumée au-dessus du bûcher
+const smoke = Array.from({ length: mobile ? 8 : 14 }, (_, i) => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: SMOKE[i % 3], color: '#2a1612', transparent: true, depthWrite: false, opacity: 0 }));
+  s.userData = { phase: i / 14, x: rand(-1.5, 1.5), spin: rand(-0.2, 0.2) }; scene.add(s); return s;
+});
+
+// braises qui montent dans l'air
+function makeMotes({ count, min, max, color, size, rise }) {
+  const pos = new Float32Array(count * 3), seed = new Float32Array(count);
+  for (let i = 0; i < count; i++) { pos.set([rand(min[0], max[0]), rand(min[1], max[1]), rand(min[2], max[2])], i * 3); seed[i] = Math.random(); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uTime: { value: 0 }, uScale: { value: pointScale() }, uSize: { value: size }, uRise: { value: rise }, uOpacity: { value: 1 },
+      uMinY: { value: min[1] }, uMaxY: { value: max[1] }, uColor: { value: new THREE.Color(color).multiplyScalar(2.2) } },
+    vertexShader: `attribute float aSeed; uniform float uTime, uScale, uSize, uRise, uMinY, uMaxY; varying float vA;
+      void main(){ vec3 p = position; float span = uMaxY - uMinY;
+        p.y = uMinY + mod(p.y - uMinY + uTime * uRise * (.4 + aSeed), span);
+        p.x += sin(uTime * .8 + aSeed * 30.) * .9; p.z += cos(uTime * .6 + aSeed * 17.) * .7;
+        float k = (p.y - uMinY) / span; vA = smoothstep(0., .1, k) * smoothstep(1., .7, k) * (.4 + .6 * sin(uTime * 4. + aSeed * 50.));
+        vec4 mv = modelViewMatrix * vec4(p, 1.); gl_PointSize = uSize * uScale * (.5 + aSeed) / -mv.z; gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 uColor; uniform float uOpacity; varying float vA;
+      void main(){ float d = length(gl_PointCoord - .5); gl_FragColor = vec4(uColor, smoothstep(.5, .0, d) * vA * uOpacity); }`,
+  });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; scene.add(pts); return pts;
+}
+const embers = makeMotes({ count: mobile ? 500 : 1100, min: [-40, 0, -70], max: [40, 40, 20], color: '#ff9a4a', size: 0.09, rise: 1.4 });
+const motes = makeMotes({ count: mobile ? 260 : 520, min: [-40, 0, -140], max: [40, 30, -64], color: '#8fe8dc', size: 0.14, rise: 0.5 });
+
+/* ---------- les pièces qui tombent dans le bûcher ---------- */
+const COINS = mobile ? 22 : 40;
+const coins = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.62, 0.62, 0.14, 28),
+  new THREE.MeshStandardMaterial({ color: '#ffcf6b', metalness: 0.95, roughness: 0.28, emissive: new THREE.Color('#ff8a2a'), emissiveIntensity: 0.35 }), COINS);
+coins.frustumCulled = false; scene.add(coins);
+const coinDummy = new THREE.Object3D();
+
+/* ---------- trajectoire de la caméra : [p, position, cible] ---------- */
+const CAM = [
+  [0.00, [0, 5, 40], [0, 11, -60]],
+  [0.10, [7, 6, 14], [0, 10, -58]],
+  [0.20, [1.5, 10.5, -44], [0, 10.4, -57.8]],
+  [0.30, [-7, 12, -47], [0, 10.6, -57.8]],
+  [0.42, [12, 20, -20], [0, 12, -58]],
+  [0.55, [0, 16, -18], [0, 3, -36]],
+  [0.66, [6, 7.5, -24], [0, 4, -36]],
+  [0.74, [-5, 7, -22], [0, 5, -36]],
+  [0.82, [0, 9, -16], [0, 12, -60]],
+  [0.89, [0, 10.5, -44], [0, 11, -64]],
+  [0.95, [0, 10.5, -64], [0, 11.5, -100]],
+  [1.00, [0, 11, -82], [0, 12, -130]],
+];
+const camCurve = new THREE.CatmullRomCurve3(CAM.map((k) => new THREE.Vector3(...k[1])), false, 'centripetal');
+const lookCurve = new THREE.CatmullRomCurve3(CAM.map((k) => new THREE.Vector3(...k[2])), false, 'centripetal');
+function curveT(p) {
+  let i = 1; while (i < CAM.length - 1 && p > CAM[i][0]) i++;
+  const t = clamp((p - CAM[i - 1][0]) / (CAM[i][0] - CAM[i - 1][0]));
+  return (i - 1 + t) / (CAM.length - 1);
+}
+
+setBoot(0.7);
+await frame();
+
+/* =========================================================
+   DOM : panneaux, navigation, rail, flash, son
+   ========================================================= */
+const panels = [...document.querySelectorAll('.panel')].map((el) => ({ el, a: +el.dataset.in, b: +el.dataset.out }));
+const FADE = 0.022;
+function updatePanels(p) {
+  for (const o of panels) {
+    const vin = o.a < 0 ? 1 : sm(o.a, o.a + FADE, p);
+    const vout = 1 - sm(o.b - FADE, o.b, p);
+    const v = vin * vout;
+    o.el.style.opacity = v.toFixed(3);
+    o.el.style.transform = `translate3d(0, ${((1 - vin) * 32 - (1 - vout) * 32).toFixed(1)}px, 0)`;
+    o.el.style.visibility = v < 0.005 ? 'hidden' : 'visible';
+  }
+}
+const railFill = document.querySelector('.rail i');
+const flash = document.querySelector('.film-flash');
+const scrollMax = () => Math.max(1, document.documentElement.scrollHeight - innerHeight);
+document.querySelectorAll('[data-go]').forEach((el) => el.addEventListener('click', (e) => {
+  e.preventDefault(); scrollTo({ top: +el.dataset.go * scrollMax(), behavior: reduced ? 'auto' : 'smooth' });
+}));
+
+// cartes des rituels
+const ritualCards = document.getElementById('ritualCards');
+CONFIG.rituals.forEach((r) => {
+  const el = document.createElement('a'); el.className = 'card'; el.href = `app.html#${r.mode}`; el.style.setProperty('--c', r.color);
+  el.innerHTML = `<img src="${ritualPortrait(r.draw, r.color)}" alt="" />
+    <header><h3>${r.name}</h3><small>${r.tag}</small></header>
+    <dl><dt>S'ouvre</dt><dd>${r.opens}</dd><dt>Récupérable</dt><dd>${r.back}</dd><dt>Frais</dt><dd>0,1 HYPE</dd></dl>`;
+  ritualCards.append(el);
+});
+
+// son : nappe grave et crépitement, le filtre s'ouvre avec la chaleur
+const soundBtn = document.querySelector('.sound');
+let audio = null;
+function createPad() {
+  const ctx = new AudioContext(); const out = ctx.createGain(); out.gain.value = 0; out.connect(ctx.destination);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 300; lp.Q.value = 0.7; lp.connect(out);
+  const delay = ctx.createDelay(); delay.delayTime.value = 0.38; const fb = ctx.createGain(); fb.gain.value = 0.3;
+  lp.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(out);
+  [[55, 0], [82.4, 5], [110, -4], [164.8, 6]].forEach(([f, det]) => {
+    const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+    const g = ctx.createGain(); g.gain.value = 0.06;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = rand(0.05, 0.15); const lg = ctx.createGain(); lg.gain.value = 0.03;
+    lfo.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(lp); o.start(); lfo.start();
+  });
+  // crépitement : bruit filtré en impulsions
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() < 0.0009 ? (Math.random() * 2 - 1) : (Math.random() * 2 - 1) * 0.02;
+  const crackle = ctx.createBufferSource(); crackle.buffer = buf; crackle.loop = true;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1200; const cg = ctx.createGain(); cg.gain.value = 0.35;
+  crackle.connect(hp); hp.connect(cg); cg.connect(out); crackle.start();
+  out.gain.linearRampToValueAtTime(0.5, ctx.currentTime + 2.5);
+  return { ctx, setP(p, heat) { lp.frequency.setTargetAtTime(240 + heat * 1400 + p * 900, ctx.currentTime, 0.4); cg.gain.setTargetAtTime(0.15 + heat * 0.35, ctx.currentTime, 0.4); } };
+}
+soundBtn.addEventListener('click', async () => {
+  const on = soundBtn.getAttribute('aria-pressed') !== 'true';
+  if (on) { if (!audio) audio = createPad(); else await audio.ctx.resume(); } else if (audio) await audio.ctx.suspend();
+  soundBtn.setAttribute('aria-pressed', String(on));
+  soundBtn.setAttribute('aria-label', on ? 'Couper le son' : 'Activer le son');
+});
+
+// sheet : questions, contrat
+const sheet = document.getElementById('sheet'), sheetBody = document.getElementById('sheetBody');
+let lastFocus = null;
+function openSheet(pane) {
+  lastFocus = document.activeElement;
+  sheet.hidden = false; document.body.style.overflow = 'hidden';
+  sheet.querySelectorAll('[data-pane]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.pane === pane)));
+  sheetBody.replaceChildren(document.getElementById(`pane-${pane}`).content.cloneNode(true));
+  sheetBody.scrollTop = 0;
+  document.getElementById('sheetClose').focus();
+}
+const closeSheet = () => { sheet.hidden = true; document.body.style.overflow = ''; lastFocus?.focus?.(); };
+document.querySelectorAll('[data-sheet]').forEach((b) => b.addEventListener('click', () => openSheet(b.dataset.sheet)));
+sheet.querySelectorAll('[data-pane]').forEach((b) => b.addEventListener('click', () => openSheet(b.dataset.pane)));
+document.getElementById('sheetClose').onclick = closeSheet;
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+
+/* =========================================================
+   BOUCLE
+   ========================================================= */
+const clock = new THREE.Clock();
+const look = new THREE.Vector3();
+const heatCol = new THREE.Color(), cold = new THREE.Color('#c2300a'), white = new THREE.Color('#fff1c8');
+const hemiBase = new THREE.Color('#6a7c86'), hemiElys = new THREE.Color('#8fe8dc');
+let pS = scrollY / scrollMax();
+
+function render() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  if (!sheet.hidden) { requestAnimationFrame(render); return; } // la scène se met en pause sous le panneau
+  const pT = scrollY / scrollMax();
+  pS += (pT - pS) * (1 - Math.exp(-dt * (reduced ? 20 : 4.2)));
+  const p = clamp(pS);
+
+  // caméra
+  const ct = curveT(p);
+  camCurve.getPoint(ct, camera.position);
+  lookCurve.getPoint(ct, look);
+  if (!reduced) { camera.position.x += Math.sin(t * 0.37) * 0.06; camera.position.y += Math.sin(t * 0.51) * 0.05; }
+  camera.lookAt(look);
+  camera.fov = T.fov.at(p) + (mobile ? 12 : 0);
+  camera.updateProjectionMatrix();
+
+  // atmosphère
+  sky.position.copy(camera.position);
+  const u = skyMat.uniforms;
+  u.uTop.value.copy(T.skyTop.at(p)); u.uMid.value.copy(T.skyMid.at(p)); u.uBot.value.copy(T.skyBot.at(p)); u.uTime.value = t;
+  u.uStars.value = 1 - sm(0.88, 0.95, p);
+  scene.fog.color.copy(T.fog.at(p)); scene.fog.density = T.fogD.at(p);
+  bloom.strength = T.bloom.at(p);
+
+  const heat = T.heat.at(p), pyreAmt = T.pyre.at(p), open = T.open.at(p), unlock = T.unlock.at(p), elys = T.elys.at(p);
+  const flick = 0.85 + 0.15 * Math.sin(t * 11.3) * Math.sin(t * 7.1 + 1.3);
+
+  // sol
+  const gu = ground.material.uniforms;
+  gu.uTime.value = t; gu.uHeat.value = heat; gu.uPyre.value = pyreAmt; gu.uFog.value.copy(scene.fog.color); gu.uFogD.value = scene.fog.density; gu.uElys.value = elys;
+
+  // lumières
+  pyreLight.intensity = 110 * pyreAmt * flick;
+  brazierLights.forEach((l, i) => { l.intensity = 55 * (0.85 + 0.15 * Math.sin(t * 9 + i * 2)); });
+  elysLight.intensity = 140 * elys;
+  hemi.color.copy(hemiBase).lerp(hemiElys, elys * 0.6);
+
+  // métal qui chauffe : du rouge sombre au blanc
+  heatCol.copy(cold).lerp(white, sm(0.85, 1.15, heat));
+  const whiteHot = sm(0.85, 1.15, heat);
+  lockMat.emissive.copy(heatCol); lockMat.emissiveIntensity = 0.03 + heat * 0.14 + whiteHot * 0.55 * flick;
+  chainMat.emissive.copy(heatCol); chainMat.emissiveIntensity = 0.02 + heat * 0.09 + whiteHot * 0.3;
+  iron.emissiveIntensity = 0.02 + heat * 0.06;
+  keyMat.color.setRGB(2 + heat * 2, 0.8 + heat * 1.6, 0.3 + heat * 0.9);
+  lockHalo.material.color.copy(heatCol); lockHalo.material.opacity = 0.12 + heat * 0.22;
+
+  // le cadenas s'ouvre, tombe, les chaînes disparaissent, les portes s'ouvrent
+  shackle.position.y = unlock * 1.3;
+  const fall = sm(0.87, 0.91, p);
+  padlock.position.set(LOCK_HOME.x, LOCK_HOME.y - fall * 9.4, LOCK_HOME.z + fall * 1.5);
+  padlock.rotation.z = fall * 0.5; padlock.rotation.x = fall * 1.2;
+  if (!reduced) padlock.rotation.y = Math.sin(t * 0.6) * 0.04 * (1 - fall);
+  chainMat.opacity = 1 - sm(0.865, 0.885, p); chain.visible = chainMat.opacity > 0.01;
+  const ang = open * 1.75;
+  doors[0].rotation.y = ang; doors[1].rotation.y = -ang;
+  elysMat.uniforms.uOpen.value = open; elysMat.uniforms.uTime.value = t;
+  elysGlow.material.opacity = elys * 0.45;
+
+  // feux
+  pyreFire.material.uniforms.uTime.value = t; pyreFire.material.uniforms.uAmt.value = pyreAmt;
+  brazierFires.forEach((f) => { f.material.uniforms.uTime.value = t; f.material.uniforms.uAmt.value = 1 - elys * 0.4; });
+  doorFire.material.uniforms.uTime.value = t; doorFire.material.uniforms.uAmt.value = clamp(heat * 0.9) * (1 - open);
+  embersBed.material.color.setRGB(0.9 * pyreAmt * flick, 0.22 * pyreAmt, 0.05);
+
+  smoke.forEach((s, i) => {
+    const k = (t * 0.06 + s.userData.phase) % 1;
+    s.position.set(PYRE.x + s.userData.x + Math.sin(t * 0.3 + i) * k * 3, 8 + k * 26, PYRE.z - k * 4);
+    s.scale.setScalar(5 + k * 16); s.material.rotation += s.userData.spin * dt;
+    s.material.opacity = Math.sin(k * Math.PI) * 0.55 * (1 - elys);
+  });
+
+  embers.material.uniforms.uTime.value = t; embers.material.uniforms.uOpacity.value = T.embers.at(p);
+  motes.material.uniforms.uTime.value = t; motes.material.uniforms.uOpacity.value = elys;
+
+  // pièces : elles tombent en spirale et fondent dans le bûcher
+  const coinAmt = T.coins.at(p);
+  coins.visible = coinAmt > 0.001;
+  if (coins.visible) {
+    for (let i = 0; i < COINS; i++) {
+      const ph = i / COINS;
+      const k = (t * 0.32 + ph) % 1;
+      const r = (1 - k) * 3.2 + 0.4, a = ph * 6.283 + k * 4;
+      coinDummy.position.set(PYRE.x + Math.cos(a) * r, 22 - k * k * 20, PYRE.z + Math.sin(a) * r);
+      coinDummy.rotation.set(t * 2 + i, t * 1.3 + ph * 4, 0);
+      coinDummy.scale.setScalar(coinAmt * (k < 0.9 ? 1 : (1 - k) / 0.1) + 1e-4);
+      coinDummy.updateMatrix(); coins.setMatrixAt(i, coinDummy.matrix);
+    }
+    coins.instanceMatrix.needsUpdate = true;
+  }
+
+  // flash turquoise au passage de la porte
+  flash.style.opacity = (sm(0.905, 0.93, p) * (1 - sm(0.93, 0.965, p)) * 0.8).toFixed(3);
+
+  // DOM
+  updatePanels(p);
+  railFill.style.height = `${(p * 100).toFixed(2)}%`;
+  railFill.style.background = p > 0.9 ? 'var(--elys)' : '';
+  if (audio) audio.setP(p, heat);
+
+  composer.render();
+  requestAnimationFrame(render);
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  const s = pointScale(); for (const m of [embers, motes, pyreFire, doorFire, ...brazierFires]) m.material.uniforms.uScale.value = s;
+});
+
+// compile les shaders avant de lever le rideau
+renderer.compile(scene, camera);
+setBoot(0.9);
+await frame();
+if (location.hash === '#entrer') scrollTo({ top: scrollMax() });
+pS = scrollY / scrollMax();
+render();
+await frame(); await frame();
+setBoot(1);
+setTimeout(() => { canvas.classList.add('on'); boot.classList.add('gone'); }, 700);
+</script>
 </body>
 </html>
