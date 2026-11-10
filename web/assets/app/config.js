@@ -1,6 +1,6 @@
 // Elysian Pyre app settings.
-// After deploying the contract (see the repository README), paste its address here and publish the site again.
-export const CONTRACT_ADDRESS = '';
+// The deployed ElysianPyre contract on Elysium (owner 0xCc1a62a89e5900DbbE458E746eEaFcF538dF0115).
+export const CONTRACT_ADDRESS = '0xcA87757556767E3605dc1c7Eb166C050eBFC9644';
 
 export const CHAIN = {
   id: 99901,

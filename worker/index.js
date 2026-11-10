@@ -18,8 +18,9 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), {
 });
 
 async function readConfig(env) {
-  const contract = await env.CONFIG.get('contract');
-  return { contract: contract || null, admin: env.ADMIN ? getAddress(env.ADMIN) : null, chainId: CHAIN_ID };
+  const stored = await env.CONFIG.get('contract').catch(() => null);
+  const contract = stored || (env.CONTRACT && isAddress(env.CONTRACT) ? getAddress(env.CONTRACT) : null);
+  return { contract, admin: env.ADMIN ? getAddress(env.ADMIN) : null, chainId: CHAIN_ID };
 }
 
 async function publish(request, env) {
