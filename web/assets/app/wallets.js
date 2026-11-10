@@ -8,7 +8,10 @@ dispatchEvent(new Event('eip6963:requestProvider'));
 
 // wallets known to support only their own fixed list of EVM networks
 const FIXED_NETWORKS = [/phantom/i];
-export const cannotAddNetworks = (info) => FIXED_NETWORKS.some((re) => re.test(info?.name || '') || re.test(info?.rdns || ''));
+// Phantom can also pose as MetaMask ("Default App Wallet" setting): check the provider's own flags too
+const isPhantomProvider = (p) => !!(p && (p.isPhantom || p._phantom || p.phantom));
+export const cannotAddNetworks = (info, provider) => isPhantomProvider(provider) || FIXED_NETWORKS.some((re) => re.test(info?.name || '') || re.test(info?.rdns || ''));
+const blocked = (w) => cannotAddNetworks(w.info, w.provider);
 
 export const current = { provider: null, info: null };
 const KEY = 'pyre-wallet';
@@ -37,7 +40,7 @@ export async function remembered() {
   await new Promise((r) => setTimeout(r, 250)); // let wallets announce themselves
   let rdns = null; try { rdns = localStorage.getItem(KEY); } catch { /* storage off */ }
   const items = list();
-  const hit = items.find((w) => w.info.rdns === rdns) || (items.length === 1 && !cannotAddNetworks(items[0].info) ? items[0] : null);
+  const hit = items.find((w) => w.info.rdns === rdns && !blocked(w)) || (items.length === 1 && !blocked(items[0]) ? items[0] : null);
   return hit ? use(hit) : null;
 }
 
@@ -45,7 +48,7 @@ export async function remembered() {
 export async function choose() {
   await new Promise((r) => setTimeout(r, 150));
   const items = list();
-  const usable = items.filter((w) => !cannotAddNetworks(w.info));
+  const usable = items.filter((w) => !blocked(w));
   if (!items.length) return null;
   if (items.length === 1) return usable.length ? use(usable[0]) : null;
   return new Promise((resolve) => {
@@ -55,13 +58,13 @@ export async function choose() {
     dlg.innerHTML = `<h2 id="wallet-pick-h">Choose a wallet</h2><p class="hint">Elysium is a custom network, so the wallet must let you add a network.</p><div class="wallet-pick__list"></div><button type="button" class="btn btn--secondary btn--block" data-cancel>Cancel</button>`;
     const box = dlg.querySelector('.wallet-pick__list');
     for (const w of items) {
-      const ok = !cannotAddNetworks(w.info);
+      const ok = !blocked(w);
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'wallet-pick__item'; b.disabled = !ok;
       const icon = /^data:image\//.test(w.info.icon || '') ? `<img src="${w.info.icon}" alt="" width="28" height="28">` : '<span class="wallet-pick__blank" aria-hidden="true"></span>';
       b.innerHTML = `${icon}<span><b></b><small></small></span>`;
       b.querySelector('b').textContent = w.info.name;
-      b.querySelector('small').textContent = ok ? 'Supports Elysium' : 'Does not support Elysium';
+      b.querySelector('small').textContent = ok ? 'Supports Elysium' : isPhantomProvider(w.provider) && !/phantom/i.test(w.info.name) ? 'This is Phantom posing as it' : 'Does not support Elysium';
       b.addEventListener('click', () => { dlg.close(); dlg.remove(); resolve(use(w)); });
       box.append(b);
     }
@@ -76,14 +79,16 @@ export async function choose() {
 export function noWalletReason() {
   const items = list();
   if (!items.length) return 'No browser wallet found. Install one that supports custom networks, such as MetaMask or Rabby, then reload this page.';
-  if (items.every((w) => cannotAddNetworks(w.info))) return unsupportedMessage(items[0].info.name);
+  if (items.every(blocked)) return isPhantomProvider(items[0].provider) && !/phantom/i.test(items[0].info.name)
+    ? 'Phantom is answering in place of your other wallet. In Phantom, open Settings, Preferences, and turn off "Default App Wallet", then reload this page.'
+    : unsupportedMessage(items[0].info.name);
   return null; // the visitor cancelled
 }
 
 // switch the current wallet to Elysium, adding the network when the wallet does not know it yet
 export async function ensureChain(CHAIN) {
   const p = current.provider; const name = current.info?.name || 'This wallet';
-  if (cannotAddNetworks(current.info)) throw new Error(unsupportedMessage(name));
+  if (cannotAddNetworks(current.info, p)) throw new Error(unsupportedMessage('Phantom'));
   const id = parseInt(await p.request({ method: 'eth_chainId' }), 16);
   if (id === CHAIN.id) return;
   try {
