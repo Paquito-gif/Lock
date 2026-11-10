@@ -13,8 +13,8 @@
     { "binding": "CONFIG", "id": "cf5874016f9f412db862b13fbc698f6d" }
   ],
   "vars": {
-    // the only wallet allowed to publish the contract address on the site (empty: publishing is off)
-    "ADMIN": ""
+    // the only wallet allowed to publish the contract address on the site 
+    "ADMIN": "0xCc1a62a89e5900DbbE458E746eEaFcF538dF0115"
   },
   "observability": { "enabled": true }
 }
