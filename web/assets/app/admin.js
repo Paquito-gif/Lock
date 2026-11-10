@@ -2,6 +2,7 @@
 import { createPublicClient, createWalletClient, custom, http, parseUnits, formatUnits, isAddress, getAddress, defineChain, BaseError, ContractFunctionRevertedError } from './viem.js';
 import { pyreAbi, pyreBytecode } from './abi.js';
 import { CHAIN } from './config.js';
+import * as wallets from './wallets.js';
 
 const elysium = defineChain({ id: CHAIN.id, name: CHAIN.name, nativeCurrency: CHAIN.currency, rpcUrls: { default: { http: [CHAIN.rpc] } }, blockExplorers: { default: { name: 'Elyscan', url: CHAIN.explorer } } });
 const pub = createPublicClient({ chain: elysium, transport: http(CHAIN.rpc) });
@@ -27,27 +28,27 @@ function reason(err) {
 const state = { account: null, chainOk: false, site: { contract: null, admin: null }, apiOk: false, contract: null };
 let pending = null; try { pending = localStorage.getItem('pyre-pending-contract'); } catch { /* storage off */ }
 
-const wallet = () => createWalletClient({ chain: elysium, transport: custom(window.ethereum), account: state.account });
-async function ensureChain() {
-  const id = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
-  if (id === CHAIN.id) return;
-  try { await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN.hexId }] }); }
-  catch (e) {
-    if (e.code !== 4902) throw e;
-    await window.ethereum.request({ method: 'wallet_addEthereumChain', params: [{ chainId: CHAIN.hexId, chainName: CHAIN.name, nativeCurrency: CHAIN.currency, rpcUrls: [CHAIN.rpc], blockExplorerUrls: [CHAIN.explorer] }] });
-  }
+const wallet = () => createWalletClient({ chain: elysium, transport: custom(wallets.current.provider), account: state.account });
+const ensureChain = () => wallets.ensureChain(CHAIN);
+let listening = null;
+function listen(p) {
+  if (listening === p) return; listening = p;
+  p.on?.('accountsChanged', (a) => { state.account = a[0] ? getAddress(a[0]) : null; sync(); });
+  p.on?.('chainChanged', () => sync());
 }
 async function connect() {
-  if (!window.ethereum) { say($('[data-deploy-msg]'), 'No browser wallet found. Install one such as MetaMask or Rabby, then reload this page.', 'err'); return; }
+  const w = await wallets.choose();
+  if (!w) { const why = wallets.noWalletReason(); if (why) say($('[data-deploy-msg]'), esc(why), 'err'); return; }
+  listen(w.provider);
   try {
-    const [a] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const [a] = await w.provider.request({ method: 'eth_requestAccounts' });
     state.account = getAddress(a);
     await ensureChain();
     await sync();
   } catch (e) { say($('[data-deploy-msg]'), esc(reason(e)), 'err'); }
 }
 async function sync() {
-  if (state.account && window.ethereum) state.chainOk = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16) === CHAIN.id;
+  if (state.account && wallets.current.provider) state.chainOk = parseInt(await wallets.current.provider.request({ method: 'eth_chainId' }), 16) === CHAIN.id;
   render();
   await loadContract();
 }
@@ -192,11 +193,11 @@ document.querySelectorAll('[data-form]').forEach((f) => f.addEventListener('subm
   if (!isAddress(v)) { input.setAttribute('aria-invalid', 'true'); return; }
   run(f.dataset.form, [getAddress(v)]);
 }));
-if (window.ethereum) {
-  window.ethereum.on?.('accountsChanged', (a) => { state.account = a[0] ? getAddress(a[0]) : null; sync(); });
-  window.ethereum.on?.('chainChanged', () => sync());
-  window.ethereum.request({ method: 'eth_accounts' }).then((a) => { if (a[0]) { state.account = getAddress(a[0]); sync(); } }).catch(() => {});
-}
+wallets.remembered().then((w) => {
+  if (!w) return;
+  listen(w.provider);
+  w.provider.request({ method: 'eth_accounts' }).then((a) => { if (a[0]) { state.account = getAddress(a[0]); sync(); } }).catch(() => {});
+});
 await loadSite();
 render();
 await loadContract();

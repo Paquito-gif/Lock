@@ -5,6 +5,7 @@ import {
 } from './viem.js';
 import { pyreAbi } from './abi.js';
 import { CONTRACT_ADDRESS, CHAIN, KNOWN_TOKENS } from './config.js';
+import * as wallets from './wallets.js';
 
 const erc20Abi = [
   { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
@@ -94,31 +95,30 @@ function reason(err) {
 }
 
 function wallet() {
-  if (!window.ethereum) return null;
-  return createWalletClient({ chain: elysium, transport: custom(window.ethereum), account: state.account });
+  if (!wallets.current.provider) return null;
+  return createWalletClient({ chain: elysium, transport: custom(wallets.current.provider), account: state.account });
 }
 
 // ---------------------------------------------------------------- wallet and chain
 
 async function ensureChain() {
-  const id = await window.ethereum.request({ method: 'eth_chainId' });
-  if (parseInt(id, 16) === CHAIN.id) return true;
-  try {
-    await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN.hexId }] });
-  } catch (e) {
-    if (e.code !== 4902) throw e;
-    await window.ethereum.request({
-      method: 'wallet_addEthereumChain',
-      params: [{ chainId: CHAIN.hexId, chainName: CHAIN.name, nativeCurrency: CHAIN.currency, rpcUrls: [CHAIN.rpc], blockExplorerUrls: [CHAIN.explorer] }],
-    });
-  }
+  await wallets.ensureChain(CHAIN);
   return true;
 }
 
+let listening = null;
+function listen(p) {
+  if (listening === p) return; listening = p;
+  p.on?.('accountsChanged', a => { state.account = a[0] ? getAddress(a[0]) : null; syncChain(); });
+  p.on?.('chainChanged', () => syncChain());
+}
+
 async function connect() {
-  if (!window.ethereum) { say('No browser wallet found. Install one such as MetaMask or Rabby, then reload this page.', 'err'); return; }
+  const w = await wallets.choose();
+  if (!w) { const why = wallets.noWalletReason(); if (why) say(esc(why), 'err'); return; }
+  listen(w.provider);
   try {
-    const [acc] = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    const [acc] = await w.provider.request({ method: 'eth_requestAccounts' });
     state.account = getAddress(acc);
     await ensureChain();
     await syncChain();
@@ -126,8 +126,8 @@ async function connect() {
 }
 
 async function syncChain() {
-  if (!window.ethereum || !state.account) { renderStatus(); return; }
-  const id = parseInt(await window.ethereum.request({ method: 'eth_chainId' }), 16);
+  if (!wallets.current.provider || !state.account) { renderStatus(); return; }
+  const id = parseInt(await wallets.current.provider.request({ method: 'eth_chainId' }), 16);
   state.chainOk = id === CHAIN.id;
   renderStatus();
   await Promise.all([loadToken(), loadLocks()]);
@@ -457,11 +457,11 @@ function init() {
   });
   el.refresh.addEventListener('click', () => { loadToken(); loadLocks(); });
 
-  if (window.ethereum) {
-    window.ethereum.on?.('accountsChanged', a => { state.account = a[0] ? getAddress(a[0]) : null; syncChain(); });
-    window.ethereum.on?.('chainChanged', () => syncChain());
-    window.ethereum.request({ method: 'eth_accounts' }).then(a => { if (a[0]) { state.account = getAddress(a[0]); syncChain(); } }).catch(() => {});
-  }
+  wallets.remembered().then(w => {
+    if (!w) return;
+    listen(w.provider);
+    w.provider.request({ method: 'eth_accounts' }).then(a => { if (a[0]) { state.account = getAddress(a[0]); syncChain(); } }).catch(() => {});
+  });
   el.tz.textContent = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local';
   const fromHash = location.hash.slice(1);
   setMode(['lock', 'forever', 'burn'].includes(fromHash) ? fromHash : 'lock');
